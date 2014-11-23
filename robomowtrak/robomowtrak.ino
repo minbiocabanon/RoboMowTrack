@@ -16,8 +16,8 @@
 #include <math.h>
 
 // Lat/Lon station position (for geofencing)
-#define BASE_LAT	43.791489		
-#define BASE_LON	1.1077
+#define BASE_LAT	43.000000		
+#define BASE_LON	1.0000
 #define RADIUS_MINI		20.0		// radius in meter where we consider that we are exactly parked in the area
 #define RADIUS_MAXI		80.0		// radius in meter for geofencing centered in BASE_LAT,BASE_LON. When GPS pos is outside this radius -> Alarm !
 
