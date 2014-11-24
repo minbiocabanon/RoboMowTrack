@@ -11,7 +11,7 @@
 #define BASE_LON	1.0000
 
 // Phone number for SMS
-#define MYPHONENUMBER	0600000000
+#define MYPHONENUMBER	"0600000000"
 
 // WiFi
 #define WIFI_AP "MYAP"  // replace with your setting

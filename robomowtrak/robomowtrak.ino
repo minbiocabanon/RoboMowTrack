@@ -193,7 +193,7 @@ void parseGPGGA(const char* GPGGAstr){
 		tmp = getComma(4, GPGGAstr);
 		longitudetmp = getFloatNumber(&GPGGAstr[tmp]);
 		// need to convert format
-        convertCoords(latitudetmp, longitudetmp, MyGPSPos.latitude, MyGPSPos.longitude);
+		convertCoords(latitudetmp, longitudetmp, MyGPSPos.latitude, MyGPSPos.longitude);
 		//get lat/lon direction
 		tmp = getComma(3, GPGGAstr);
 		MyGPSPos.latitude_dir = (GPGGAstr[tmp]);
@@ -243,25 +243,26 @@ void GetGPSPos(void){
 	// For one second we parse GPS data and report some key values
 	if(MyFlag.taskGetGPS){
 		MyFlag.taskGetGPS = false;		
-		Serial.println("LGPS loop"); 
+		Serial.println("--- LGPS loop ---"); 
 		LGPS.getData(&info);
 		Serial.println((char*)info.GPGGA); 
 		parseGPGGA((const char*)info.GPGGA);
-		
+				
 		//check fix 
 		//if GPS fix is OK
-		if ( MyGPSPos.fix == DGPS || MyGPSPos.fix == PPS || MyGPSPos.fix == GPS){
+		if ( MyGPSPos.fix == GPS || MyGPSPos.fix == DGPS || MyGPSPos.fix == PPS ){
 			//set a flag
-			MyFlag.fix3D == true;
+			MyFlag.fix3D = true;
 		}
 		else{
 			//reset flag 
-			MyFlag.fix3D == false;
+			MyFlag.fix3D = false;		
 		}
 		
 		char buff[256];
 		sprintf(buff, "Current position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir);
 		Serial.println(buff);
+		Serial.println();
 	
 	}
 }
@@ -273,7 +274,7 @@ void GetGPSPos(void){
 void Geofencing(void){
 	//check if GPS fix is good
 	if (MyFlag.fix3D && MyFlag.taskTestGeof){
-		MyFlag.taskGetGPS = false;
+		MyFlag.taskTestGeof = false;
 		//compute distance between actual position and reference position
 		float distance_base = DistanceBetween(BASE_LAT, BASE_LON, MyGPSPos.latitude, MyGPSPos.longitude);
 		Serial.print("distance BASE->Robot: ");
@@ -317,7 +318,6 @@ void AlertMng(void){
 			Serial.println("SMS is not sent");
 		}
 	}
-
 }
 
 //----------------------------------------------------------------------
@@ -332,7 +332,7 @@ void Scheduler() {
 	
 	if( (millis() - taskTestGeof) > PERIOD_TEST_GEOFENCING){
 		taskTestGeof = millis();
-		MyFlag.taskTestGeof = true;
+		MyFlag.taskTestGeof = true;		
 	}
 }
 
