@@ -13,21 +13,16 @@
 //--------------------------------------------------
 
 #include <LGPS.h>
+#include <LGSM.h>
 #include <math.h>
-#include "mygpscoord.h"
+#include "myprivatedata.h"
 
-<<<<<<< HEAD
-// Params for geofencing
-=======
-// Lat/Lon station position (for geofencing)
-#define BASE_LAT	43.000000		
-#define BASE_LON	1.0000
->>>>>>> 2bf6bc434d3ec11e913502bc845280b280f53909
+//Params for geofencing
 #define RADIUS_MINI		20.0		// radius in meter where we consider that we are exactly parked in the area
 #define RADIUS_MAXI		80.0		// radius in meter for geofencing centered in BASE_LAT,BASE_LON. When GPS pos is outside this radius -> Alarm !
 
 #define	PERIOD_GET_GPS	5000			// interval between 2 GPS positions in milliseconds
-#define	PERIOD_TEST_GEOFENCING	5000	// interval between 2 geofencing check
+#define	PERIOD_TEST_GEOFENCING	60000	// interval between 2 geofencing check
 
 gpsSentenceInfoStruct info;
 char buff[256];
@@ -37,8 +32,10 @@ unsigned long taskTestGeof;
 
 
 struct GPSPos {
-	double latitude;
-	double longitude;
+	float latitude;
+	char latitude_dir;
+	float longitude;
+	char longitude_dir;
 	int hour;
 	int minute;
 	int second;
@@ -74,31 +71,31 @@ FixQuality GPSfix;
 //!\brief	as signed decimal-degrees latitude and longitude. Uses great-circle
 //!\brief	distance computation for hypothetical sphere of radius 6372795 meters.
 //!\brief	Because Earth is no exact sphere, rounding errors may be up to 0.5%.
-//!\param	double lat1, double long1, double lat2, double long2
-//!\return	meters (double)
+//!\param	float lat1, float long1, float lat2, float long2
+//!\return	meters (float)
 //---------------------------------------------------------------------- 
-double DistanceBetween(double lat1, double long1, double lat2, double long2){
+float DistanceBetween(float lat1, float long1, float lat2, float long2){
   // Courtesy of Maarten Lamers
-  double delta = radians(long1-long2);
-  double sdlong = sin(delta);
-  double cdlong = cos(delta);
+  float delta = radians(long1-long2);
+  float sdlong = sin(delta);
+  float cdlong = cos(delta);
   lat1 = radians(lat1);
   lat2 = radians(lat2);
-  double slat1 = sin(lat1);
-  double clat1 = cos(lat1);
-  double slat2 = sin(lat2);
-  double clat2 = cos(lat2);
+  float slat1 = sin(lat1);
+  float clat1 = cos(lat1);
+  float slat2 = sin(lat2);
+  float clat2 = cos(lat2);
   delta = (clat1 * slat2) - (slat1 * clat2 * cdlong);
   delta = sq(delta);
   delta += sq(clat2 * sdlong);
   delta = sqrt(delta);
-  double denom = (slat1 * slat2) + (clat1 * clat2 * cdlong);
+  float denom = (slat1 * slat2) + (clat1 * clat2 * cdlong);
   delta = atan2(delta, denom);
   return delta * 6372795;
 }
 
 //----------------------------------------------------------------------
-//!\brief	return number of char between two comma
+//!\brief	return position of the comma number 'num' in the char array 'str'
 //!\return  char
 //----------------------------------------------------------------------
 static unsigned char getComma(unsigned char num,const char *str){
@@ -114,13 +111,13 @@ static unsigned char getComma(unsigned char num,const char *str){
 }
 
 //----------------------------------------------------------------------
-//!\brief	convert char buffer to double
-//!\return  double
+//!\brief	convert char buffer to float
+//!\return  float
 //----------------------------------------------------------------------
-static double getDoubleNumber(const char *s){
+static float getFloatNumber(const char *s){
 	char buf[10];
 	unsigned char i;
-	double rev;
+	float rev;
 
 	i=getComma(1, s);
 	i = i - 1;
@@ -132,12 +129,12 @@ static double getDoubleNumber(const char *s){
 
 //----------------------------------------------------------------------
 //!\brief	convert char buffer to int
-//!\return  double
+//!\return  float
 //----------------------------------------------------------------------
-static double getIntNumber(const char *s){
+static float getIntNumber(const char *s){
 	char buf[10];
 	unsigned char i;
-	double rev;
+	float rev;
 
 	i=getComma(1, s);
 	i = i - 1;
@@ -177,8 +174,9 @@ void parseGPGGA(const char* GPGGAstr){
    *  (empty field) DGPS station ID number
    *  *47          the checksum data, always begins with *
    */
-	int tmp;
+
 	if(GPGGAstr[0] == '$'){
+		int tmp;
 		tmp = getComma(1, GPGGAstr);
 		MyGPSPos.hour     = (GPGGAstr[tmp + 0] - '0') * 10 + (GPGGAstr[tmp + 1] - '0');
 		MyGPSPos.minute   = (GPGGAstr[tmp + 2] - '0') * 10 + (GPGGAstr[tmp + 3] - '0');
@@ -188,12 +186,23 @@ void parseGPGGA(const char* GPGGAstr){
 		sprintf(buff, "UTC timer %2d-%2d-%2d", MyGPSPos.hour, MyGPSPos.minute, MyGPSPos.second);
 		Serial.println(buff);
 		//get lat/lon coordinates
+		float latitudetmp;
+		float longitudetmp;
 		tmp = getComma(2, GPGGAstr);
-		MyGPSPos.latitude = getDoubleNumber(&GPGGAstr[tmp]);
+		latitudetmp = getFloatNumber(&GPGGAstr[tmp]);
 		tmp = getComma(4, GPGGAstr);
-		MyGPSPos.longitude = getDoubleNumber(&GPGGAstr[tmp]);
-		sprintf(buff, "latitude = %10.4f, longitude = %10.4f", MyGPSPos.latitude, MyGPSPos.longitude);
+		longitudetmp = getFloatNumber(&GPGGAstr[tmp]);
+		// need to convert format
+        convertCoords(latitudetmp, longitudetmp, MyGPSPos.latitude, MyGPSPos.longitude);
+		//get lat/lon direction
+		tmp = getComma(3, GPGGAstr);
+		MyGPSPos.latitude_dir = (GPGGAstr[tmp]);
+		tmp = getComma(5, GPGGAstr);		
+		MyGPSPos.longitude_dir = (GPGGAstr[tmp]);
+		
+		sprintf(buff, "latitude = %10.4f-%c, longitude = %10.4f-%c", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir);
 		Serial.println(buff); 
+		
 		//get GPS fix quality
 		tmp = getComma(6, GPGGAstr);
 		MyGPSPos.fix = getIntNumber(&GPGGAstr[tmp]);    
@@ -208,6 +217,22 @@ void parseGPGGA(const char* GPGGAstr){
 	else{
 		Serial.println("Not get data"); 
 	}
+}
+
+//----------------------------------------------------------------------
+//!\brief	Convert GPGGA coordinates (degrees-mins-secs) to true decimal-degrees
+//!\return  -
+//----------------------------------------------------------------------
+void convertCoords(float latitude, float longitude, float &lat_return, float &lon_return){
+	int lat_deg_int = int(latitude/100);		//extract the first 2 chars to get the latitudinal degrees
+	int lon_deg_int = int(longitude/100);		//extract first 3 chars to get the longitudinal degrees
+    // must now take remainder/60
+    //this is to convert from degrees-mins-secs to decimal degrees
+    // so the coordinates are "google mappable"
+    float latitude_float = latitude - lat_deg_int * 100;		//remove the degrees part of the coordinates - so we are left with only minutes-seconds part of the coordinates
+    float longitude_float = longitude - lon_deg_int * 100;     
+    lat_return = lat_deg_int + latitude_float / 60 ;			//add back on the degrees part, so it is decimal degrees
+    lon_return = lon_deg_int + longitude_float / 60 ;
 }
 
 //----------------------------------------------------------------------
@@ -233,6 +258,11 @@ void GetGPSPos(void){
 			//reset flag 
 			MyFlag.fix3D == false;
 		}
+		
+		char buff[256];
+		sprintf(buff, "Current position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir);
+		Serial.println(buff);
+	
 	}
 }
 
@@ -273,7 +303,19 @@ void AlertMng(void){
 
 	if (MyFlag.PosOutiseArea){
 		MyFlag.PosOutiseArea = false;
-		Serial.println("AlertMng"); 
+		Serial.println("AlertMng : start sending SMS"); 
+		
+		LSMS.beginSMS(MYPHONENUMBER);
+		char SMSbuff[256];
+		sprintf(SMSbuff, "Robomow Alert !! current position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir);
+		Serial.println(SMSbuff);
+		LSMS.print(SMSbuff);
+		if(LSMS.endSMS()){
+			Serial.println("SMS is sent"); 
+		}
+		else{
+			Serial.println("SMS is not sent");
+		}
 	}
 
 }
@@ -304,7 +346,12 @@ void setup() {
 	// GPS power on
 	LGPS.powerOn();
 	Serial.println("LGPS Power on, and waiting ..."); 
-	delay(3000);
+	
+	// GSM setup
+	while(!LSMS.ready())
+		delay(1000);
+	Serial.println("SIM ready for work!");	
+	
 	// for scheduler
 	taskGetGPS = millis();
 	taskTestGeof = millis();
