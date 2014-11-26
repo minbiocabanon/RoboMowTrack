@@ -13,13 +13,13 @@
 #define FLAG_ALARM_ONOFF	1	// 1 = alarm allowed , 0 = alarme not allowed (will not send SMS)
 
 // Lat/Lon station position (for geofencing)
-#define BASE_LAT	43.001489		
+#define BASE_LAT	43.12489		
 #define BASE_LAT_DIR	'N'
-#define BASE_LON	1.0007
+#define BASE_LON	1.5407
 #define BASE_LON_DIR	'E'
 
 // Phone number to call or for SMS
-#define MYPHONENUMBER	"+33630303030"
+#define MYPHONENUMBER	"+33634681344"
 
 // SMS Menu
 #define SMSSECRET	"1234"
