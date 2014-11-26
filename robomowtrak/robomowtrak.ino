@@ -207,7 +207,7 @@ void parseGPGGA(const char* GPGGAstr){
 
 		//get time
 		sprintf(buff, "UTC timer %2d-%2d-%2d", MyGPSPos.hour, MyGPSPos.minute, MyGPSPos.second);
-		Serial.println(buff);
+		Serial.print(buff);
 		//get lat/lon coordinates
 		float latitudetmp;
 		float longitudetmp;
@@ -229,16 +229,16 @@ void parseGPGGA(const char* GPGGAstr){
 		//get GPS fix quality
 		tmp = getComma(6, GPGGAstr);
 		MyGPSPos.fix = getIntNumber(&GPGGAstr[tmp]);    
-		sprintf(buff, "GPS fix quality = %d", MyGPSPos.fix);
+		sprintf(buff, "  -  GPS fix quality = %d", MyGPSPos.fix);
 		Serial.print(buff);   
 		//get satellites in view
 		tmp = getComma(7, GPGGAstr);
 		MyGPSPos.num = getIntNumber(&GPGGAstr[tmp]);    
-		sprintf(buff, "  -  satellites number = %d", MyGPSPos.num);
+		sprintf(buff, "  -  %d satellites", MyGPSPos.num);
 		Serial.println(buff); 
 	}
 	else{
-		Serial.println("Not get data"); 
+		Serial.println("No GPS data"); 
 	}
 }
 
@@ -296,12 +296,13 @@ void GetGPSPos(void){
 void GetBatInfo(void){
 	// For one second we parse GPS data and report some key values
 	if(MyFlag.taskGetBat){
+		Serial.println("-- Battery Info --");
 		MyFlag.taskGetBat = false;
 		MyBattery.bat_level = LBattery.level();
 		MyBattery.charging_status  = LBattery.isCharging();
-		sprintf(buff,"battery level = %d", MyBattery.bat_level );
+		sprintf(buff,"battery level = %d%", MyBattery.bat_level );
 		Serial.print(buff);
-		sprintf(buff," is charging = %d", MyBattery.charging_status );
+		sprintf(buff," is charging = %d \n", MyBattery.charging_status );
 		Serial.println(buff);
 	}
 }
@@ -316,9 +317,10 @@ void Geofencing(void){
 		MyFlag.taskTestGeof = false;
 		Serial.println("-- Geofencing --"); 
 		//compute distance between actual position and reference position
-		float distance_base = DistanceBetween(BASE_LAT, BASE_LON, MyGPSPos.latitude, MyGPSPos.longitude);
-		Serial.print("distance BASE->Robot: ");
-		Serial.println(distance_base,1);
+		float distance_base = DistanceBetween(MyParam.base_lat, MyParam.base_lon, MyGPSPos.latitude, MyGPSPos.longitude);
+		char buff[256];
+		sprintf(buff, "distance BASE->Robot: %.1f m", distance_base);
+		Serial.println(buff);
 		
 		//check where we are
 		if(distance_base <= RADIUS_MINI){
@@ -333,6 +335,7 @@ void Geofencing(void){
 			Serial.println("ALARM, outside AREA !!!!");
 			MyFlag.PosOutiseArea = true;
 		}
+		Serial.println();
 	}
 }
 
@@ -393,7 +396,7 @@ void AlertMng(void){
 		MyFlag.PosOutiseArea = false;
 		Serial.println("AlertMng : start sending SMS"); 
 		
-		LSMS.beginSMS(MYPHONENUMBER);
+		LSMS.beginSMS(MyParam.myphonenumber);
 		char SMSbuff[256];
 		sprintf(SMSbuff, "Robomow Alert !! current position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \n Bat = %d, status = %d", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.bat_level, MyBattery.charging_status); 
 		Serial.println(SMSbuff);
@@ -434,6 +437,41 @@ void Scheduler() {
 }
 
 //----------------------------------------------------------------------
+//!\brief	Load params from EEPROM
+//----------------------------------------------------------------------
+void LoadParamEEPROM() {
+	
+	EEPROM_readAnything(0, MyParam);
+	
+	//check if parameters were already written
+	if( MyParam.flag_data_written == false ){
+		Serial.println("--- !!! Loading DEFAULT parameters from EEPROM ...  --- ");
+		//EEPROM is empty , so load default parameters (see myprivatedata.h)
+		MyParam.flag_alarm_onoff = 0;
+		
+		size_t destination_size = sizeof (MyParam.smssecret);
+		snprintf(MyParam.smssecret, destination_size, "%s", SMSSECRET);
+		destination_size = sizeof (MyParam.myphonenumber);
+		snprintf(MyParam.myphonenumber, destination_size, "%s", MYPHONENUMBER);		
+		MyParam.base_lat = BASE_LAT;
+		MyParam.base_lat_dir = BASE_LAT_DIR;
+		MyParam.base_lon = BASE_LON;
+		MyParam.base_lon_dir = BASE_LON_DIR;
+		MyParam.bat_level_trig = BAT_LEVEL_TRIG;
+	
+		//set flag that default data are stored
+		MyParam.flag_data_written = true;
+		
+		//SAVE IN EEPROM !
+		EEPROM_writeAnything(0, MyParam);
+		Serial.println("--- !!! DEFAULT parameters stored in EEPROM !!! --- ");		
+	}
+	else{
+		Serial.println("--- Parameters loaded from EEPROM --- ");		
+	}
+}
+
+//----------------------------------------------------------------------
 //!\brief           SETUP()
 //----------------------------------------------------------------------
 void setup() {
@@ -448,6 +486,10 @@ void setup() {
 	while(!LSMS.ready())
 		delay(1000);
 	Serial.println("SIM ready for work!");	
+	
+	// load params from EEPROM
+	LoadParamEEPROM();
+	
 	
 	// for scheduler
 	taskGetGPS = millis();
