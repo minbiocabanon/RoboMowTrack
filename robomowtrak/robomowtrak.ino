@@ -10,24 +10,32 @@
 //! some notes here :
 //! google url to send by sms : https://www.google.com/maps?q=<lat>,<lon>
 //!
+//! millis() overflow/reset over 50 days
 //--------------------------------------------------
 
 #include <LGPS.h>
 #include <LGSM.h>
+#include <LBattery.h>
 #include <math.h>
+#include <LEEPROM.h>
+#include "EEPROMAnything.h"
 #include "myprivatedata.h"
 
 //Params for geofencing
 #define RADIUS_MINI		20.0		// radius in meter where we consider that we are exactly parked in the area
 #define RADIUS_MAXI		80.0		// radius in meter for geofencing centered in BASE_LAT,BASE_LON. When GPS pos is outside this radius -> Alarm !
 
-#define	PERIOD_GET_GPS	5000			// interval between 2 GPS positions in milliseconds
-#define	PERIOD_TEST_GEOFENCING	60000	// interval between 2 geofencing check
+#define	PERIOD_GET_GPS			5000	// interval between 2 GPS positions in milliseconds
+#define	PERIOD_TEST_GEOFENCING	120000	// interval between 2 geofencing check
+#define PERIOD_BAT_INFO			120000	// interval between 2 battery level measurement
+#define PERIOD_CHECK_SMS		2000	// interval between 2 SMS check
 
 gpsSentenceInfoStruct info;
 char buff[256];
 unsigned long taskGetGPS;
 unsigned long taskTestGeof;
+unsigned long taskGetBat;
+unsigned long taskCheckSMS;
 
 
 
@@ -41,16 +49,31 @@ struct GPSPos {
 	int second;
 	int	num;
 	int fix;
-};
-GPSPos MyGPSPos;
+}MyGPSPos;
+
+
+struct Battery {
+	unsigned int bat_level;
+	unsigned int charging_status;
+}MyBattery;
+
+struct SMS {
+	bool flagSecret;
+	char message[256];
+	int menucmd;
+	int menulevel;
+}MySMS;
 
 struct FlagReg {
-	bool taskGetGPS;	// flat to indicate when process to get GPS possition
-	bool taskTestGeof;	// flat to indicate when process geofencing
+	bool taskGetGPS;	// flag to indicate when process to get GPS possition
+	bool taskGetBat;		// flag to indicate that we have to get battery level and charging status
+	bool taskTestGeof;	// flag to indicate when process geofencing
+	bool taskCheckSMS;	// flag to indicate when check SMS
+	bool SMSReceived;	// flag to indicate that an SMS has been received
 	bool fix3D;			// flag to indicate if fix is 3D (at least) or not
 	bool PosOutiseArea;	// flag to indicate if fix is 3D (at least) or not
-};
-FlagReg MyFlag;
+}MyFlag;
+
 
 
 enum FixQuality {
@@ -200,18 +223,18 @@ void parseGPGGA(const char* GPGGAstr){
 		tmp = getComma(5, GPGGAstr);		
 		MyGPSPos.longitude_dir = (GPGGAstr[tmp]);
 		
-		sprintf(buff, "latitude = %10.4f-%c, longitude = %10.4f-%c", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir);
-		Serial.println(buff); 
+		//sprintf(buff, "latitude = %10.4f-%c, longitude = %10.4f-%c", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir);
+		//Serial.println(buff); 
 		
 		//get GPS fix quality
 		tmp = getComma(6, GPGGAstr);
 		MyGPSPos.fix = getIntNumber(&GPGGAstr[tmp]);    
 		sprintf(buff, "GPS fix quality = %d", MyGPSPos.fix);
-		Serial.println(buff);   
+		Serial.print(buff);   
 		//get satellites in view
 		tmp = getComma(7, GPGGAstr);
 		MyGPSPos.num = getIntNumber(&GPGGAstr[tmp]);    
-		sprintf(buff, "satellites number = %d", MyGPSPos.num);
+		sprintf(buff, "  -  satellites number = %d", MyGPSPos.num);
 		Serial.println(buff); 
 	}
 	else{
@@ -245,7 +268,7 @@ void GetGPSPos(void){
 		MyFlag.taskGetGPS = false;		
 		Serial.println("--- LGPS loop ---"); 
 		LGPS.getData(&info);
-		Serial.println((char*)info.GPGGA); 
+		Serial.print((char*)info.GPGGA); 
 		parseGPGGA((const char*)info.GPGGA);
 				
 		//check fix 
@@ -263,7 +286,23 @@ void GetGPSPos(void){
 		sprintf(buff, "Current position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir);
 		Serial.println(buff);
 		Serial.println();
-	
+	}
+}
+
+//----------------------------------------------------------------------
+//!\brief	Grab battery level and status
+//!\return  -
+//----------------------------------------------------------------------
+void GetBatInfo(void){
+	// For one second we parse GPS data and report some key values
+	if(MyFlag.taskGetBat){
+		MyFlag.taskGetBat = false;
+		MyBattery.bat_level = LBattery.level();
+		MyBattery.charging_status  = LBattery.isCharging();
+		sprintf(buff,"battery level = %d", MyBattery.bat_level );
+		Serial.print(buff);
+		sprintf(buff," is charging = %d", MyBattery.charging_status );
+		Serial.println(buff);
 	}
 }
 
@@ -275,6 +314,7 @@ void Geofencing(void){
 	//check if GPS fix is good
 	if (MyFlag.fix3D && MyFlag.taskTestGeof){
 		MyFlag.taskTestGeof = false;
+		Serial.println("-- Geofencing --"); 
 		//compute distance between actual position and reference position
 		float distance_base = DistanceBetween(BASE_LAT, BASE_LON, MyGPSPos.latitude, MyGPSPos.longitude);
 		Serial.print("distance BASE->Robot: ");
@@ -297,6 +337,53 @@ void Geofencing(void){
 }
 
 //----------------------------------------------------------------------
+//!\brief	Verify if SMS is incoming
+//!\return  -
+//----------------------------------------------------------------------
+void CheckSMSrecept(void){
+	// Check if there is new SMS
+	if(MyFlag.taskCheckSMS && LSMS.available()){
+		MyFlag.taskCheckSMS = false;
+		char buf[20];
+		int v, i = 0; 
+		Serial.println("There is new message.");
+		// display Number part
+		LSMS.remoteNumber(buf, 20);
+		Serial.print("Number:");
+		Serial.println(buf);
+		// display Content part
+		Serial.print("Content:");
+		//copy SMS to buffer
+		while(true){
+			v = LSMS.read();
+			if(v < 0)
+				break;
+			MySMS.message[i] = (char)v;
+			Serial.print(MySMS.message[i]);
+			i++;
+		}
+		Serial.println();
+		// delete message
+		LSMS.flush();
+		// set flag to analyse this SMS
+		MyFlag.SMSReceived = true;
+	}
+}
+
+//----------------------------------------------------------------------
+//!\brief	Manage SMS menu
+//!\return  -
+//----------------------------------------------------------------------
+void MenuSMS(void){
+	// if a new message is received
+	if( MyFlag.SMSReceived == true ){
+	
+		// SMS read reset flag
+		MyFlag.SMSReceived = false;
+	}
+}
+
+//----------------------------------------------------------------------
 //!\brief	Manage alert when occurs
 //!\return  -
 //----------------------------------------------------------------------
@@ -308,7 +395,7 @@ void AlertMng(void){
 		
 		LSMS.beginSMS(MYPHONENUMBER);
 		char SMSbuff[256];
-		sprintf(SMSbuff, "Robomow Alert !! current position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir);
+		sprintf(SMSbuff, "Robomow Alert !! current position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \n Bat = %d, status = %d", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.bat_level, MyBattery.charging_status); 
 		Serial.println(SMSbuff);
 		LSMS.print(SMSbuff);
 		if(LSMS.endSMS()){
@@ -334,6 +421,16 @@ void Scheduler() {
 		taskTestGeof = millis();
 		MyFlag.taskTestGeof = true;		
 	}
+	
+	if( (millis() - taskGetBat) > PERIOD_BAT_INFO){
+		taskGetBat = millis();
+		MyFlag.taskGetBat = true;		
+	}	
+	
+	if( (millis() - taskCheckSMS) > PERIOD_CHECK_SMS){
+		taskCheckSMS = millis();
+		MyFlag.taskCheckSMS = true;		
+	}
 }
 
 //----------------------------------------------------------------------
@@ -355,6 +452,8 @@ void setup() {
 	// for scheduler
 	taskGetGPS = millis();
 	taskTestGeof = millis();
+	taskGetBat = millis();
+	taskCheckSMS = millis();
 	
 }
 
@@ -364,6 +463,9 @@ void setup() {
 void loop() {
 	Scheduler();
 	GetGPSPos();
+	GetBatInfo();
+	CheckSMSrecept();
+	MenuSMS();
 	// SendGPS2Wifi();
 	Geofencing();
 	AlertMng();

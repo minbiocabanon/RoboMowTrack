@@ -7,12 +7,16 @@
 
 
 // Lat/Lon station position (for geofencing)
-#define BASE_LAT	43.000000		
-#define BASE_LON	1.0000
+#define BASE_LAT	43.791489		
+// #define BASE_LAT	43.091489		
+#define BASE_LON	1.1077
 
 // Phone number for SMS
-#define MYPHONENUMBER	"0600000000"
+#define MYPHONENUMBER	"0630213069"
+
+// SMS Menu
+#define SMSSECRET	"1234"
 
 // WiFi
-#define WIFI_AP "MYAP"  // replace with your setting
-#define WIFI_PWD "MYPASSWORD"  // replace with your setting
+#define WIFI_AP "VIRUS"  // replace with your setting
+#define WIFI_PWD "MINBIOCABANON"  // replace with your setting
