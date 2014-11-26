@@ -29,7 +29,10 @@
 #define	PERIOD_TEST_GEOFENCING	120000	// interval between 2 geofencing check
 #define PERIOD_BAT_INFO			120000	// interval between 2 battery level measurement
 #define PERIOD_CHECK_SMS		2000	// interval between 2 SMS check
-#define TIMEOUT_SMS_MENU		60000	// When timeout, SMS menu return to login (user should send password again to log)
+#define TIMEOUT_SMS_MENU		300000	// When timeout, SMS menu return to login (user should send password again to log)
+
+// SMS menu architecture
+#define TXT_MAIN_MENU	"Main Menu \r\n1 : Status\r\n2 : Alarm ON\r\n3 : Alarm OFF"
 
 gpsSentenceInfoStruct info;
 char buff[256];
@@ -93,16 +96,29 @@ enum FixQuality {
 
 enum SMSMENU{
 	SM_NOSTATE,		//0
-	SM_LOGIN,			//1
-	SM_MENU_MAIN,		//2
+	SM_LOGIN,		//1
+	SM_MENU_MAIN,	//2
 	SM_ACTION1,		//3
 	SM_ACTION2,		//4
 	SM_ACTION3,		//5
 	SM_ACTION4,		//6
 	SM_ACTION5,		//7
 	SM_ACTION6,		//8
-	SM_ACTION7			//9
+	SM_ACTION7		//9
 	};
+
+enum CMDSMS{
+	CMD_NOPE,			//0
+	CMD_STATUS,			//1
+	CMD_ALM_ON,			//2
+	CMD_ALM_OFF,		//3
+	CMD_ACTION2,		//4
+	CMD_ACTION3,		//5
+	CMD_ACTION4,		//6
+	CMD_ACTION5,		//7
+	CMD_ACTION6,		//8
+	CMD_ACTION7			//9
+	};	
 
 //----------------------------------------------------------------------
 //!\brief	returns distance in meters between two positions, both specified
@@ -361,7 +377,9 @@ void CheckSMSrecept(void){
 	if(MyFlag.taskCheckSMS && LSMS.available()){
 		MyFlag.taskCheckSMS = false;
 		char buf[20];
-		int v, i = 0; 
+		int v, i = 0;
+		//flush buffer before writing in it
+		memset(&MySMS.message[0], 0, sizeof(MySMS.message));
 		Serial.println("--- SMS received ---");
 		// display Number part
 		LSMS.remoteNumber(buf, 20);
@@ -405,6 +423,60 @@ bool CheckSMSPassword(){
 }
 
 //----------------------------------------------------------------------
+//!\brief	Does action selected by user in the main menu
+//!\return  -
+//----------------------------------------------------------------------
+void ProcessMenuMain(void){
+	int val = atoi(MySMS.message);
+	char flagalarm[4];
+	switch(val){
+		case CMD_STATUS:		//status
+			Serial.println("Status required ");
+			//convert flag_alarm_onoff
+
+			sprintf(flagalarm,"OFF");
+			if(MyParam.flag_alarm_onoff)
+				sprintf(flagalarm,"ON");
+			sprintf(buff, "Status : \r\nCurrent position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \r\nBat = %d, status = %d\r\nAlarm is %s.", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.bat_level, MyBattery.charging_status, flagalarm); 
+			Serial.println(buff);
+			SendSMS(MySMS.incomingnumber, buff);
+			break;
+		case CMD_ALM_ON:		// alarm ON
+			Serial.println("Alarm ON required");
+			MyParam.flag_alarm_onoff = true;
+			//convert flag_alarm_onoff
+			snprintf(flagalarm,3,"ON");			
+			//prepare SMS content
+			sprintf(buff, "Alarm switch to %s state", flagalarm); 
+			Serial.println(buff);
+			//send SMS
+			SendSMS(MySMS.incomingnumber, buff);
+			//Save change in EEPROM
+			EEPROM_writeAnything(0, MyParam);
+			Serial.println("Data saved in EEPROM");		
+			break;
+		case CMD_ALM_OFF:		// alarm OFF
+			Serial.println("Alarm OFF required");
+			MyParam.flag_alarm_onoff = false;
+			//convert flag_alarm_onoff
+			snprintf(flagalarm,4,"OFF");			
+			//prepare SMS content
+			sprintf(buff, "Alarm switch to %s state", flagalarm); 			
+			Serial.println(buff);
+			//send SMS
+			SendSMS(MySMS.incomingnumber, buff);
+			//Save change in EEPROM
+			EEPROM_writeAnything(0, MyParam);
+			Serial.println("Data saved in EEPROM");			
+			break;
+		case CMD_ACTION2:
+			break;
+		default:
+			break;
+	}
+}
+
+//----------------------------------------------------------------------
 //!\brief	Manage SMS menu
 //!\return  -
 //----------------------------------------------------------------------
@@ -413,6 +485,7 @@ void MenuSMS(void){
 	if( MyFlag.SMSReceived == true ){
 		Serial.println("--- SMS Menu manager ---");
 		switch(MySMS.menupos){
+			default:
 			case SM_NOSTATE:
 				break;
 			
@@ -421,7 +494,7 @@ void MenuSMS(void){
 					Serial.println("Password is OK.");
 					// password is OK, we can send main menu
 					MySMS.menupos = SM_MENU_MAIN;
-					sprintf(buff, "Main Menu \r\n1 : OK\r\n2 : NOK"); 
+					sprintf(buff, TXT_MAIN_MENU); 
 					Serial.println(buff);
 					SendSMS(MySMS.incomingnumber, buff);
 					// start timer to auto-logout when no action occurs
@@ -433,6 +506,10 @@ void MenuSMS(void){
 				break;
 			
 			case SM_MENU_MAIN:
+					// reload timer to avoid auto-logout
+					TimeOutSMSMenu = millis();
+					Serial.println("Menu Main ");
+					ProcessMenuMain();
 				break;
 		}
 	
@@ -466,8 +543,8 @@ bool SendSMS( const char *phonenumber, const char *message ){
 //!\return  -
 //----------------------------------------------------------------------
 void AlertMng(void){
-
-	if (MyFlag.PosOutiseArea){
+	// if alarm is allowed AND position is outside autorized area
+	if ( MyParam.flag_alarm_onoff && MyFlag.PosOutiseArea){
 		MyFlag.PosOutiseArea = false;
 		Serial.println("AlertMng : start sending SMS"); 
 		sprintf(buff, "Robomow Alert !! current position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \n Bat = %d, status = %d", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.bat_level, MyBattery.charging_status); 
@@ -521,7 +598,7 @@ void LoadParamEEPROM() {
 	if( MyParam.flag_data_written == false ){
 		Serial.println("--- !!! Loading DEFAULT parameters from EEPROM ...  --- ");
 		//EEPROM is empty , so load default parameters (see myprivatedata.h)
-		MyParam.flag_alarm_onoff = 0;
+		MyParam.flag_alarm_onoff = FLAG_ALARM_ONOFF;
 		
 		size_t destination_size = sizeof (MyParam.smssecret);
 		snprintf(MyParam.smssecret, destination_size, "%s", SMSSECRET);

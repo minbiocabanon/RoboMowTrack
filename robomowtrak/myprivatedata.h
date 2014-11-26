@@ -8,15 +8,18 @@
 //----------------------------------------------------------------------
 //!\brief	These are DEFAULTS parameters !
 //----------------------------------------------------------------------
+
+// Alarm allowed ?
+#define FLAG_ALARM_ONOFF	1	// 1 = alarm allowed , 0 = alarme not allowed (will not send SMS)
+
 // Lat/Lon station position (for geofencing)
-#define BASE_LAT	43.791489		
+#define BASE_LAT	43.001489		
 #define BASE_LAT_DIR	'N'
-// #define BASE_LAT	43.091489		
-#define BASE_LON	1.1077
+#define BASE_LON	1.0007
 #define BASE_LON_DIR	'E'
 
 // Phone number to call or for SMS
-#define MYPHONENUMBER	"+33630213069"
+#define MYPHONENUMBER	"+33630303030"
 
 // SMS Menu
 #define SMSSECRET	"1234"
@@ -25,7 +28,7 @@
 #define BAT_LEVEL_TRIG	20
 
 // WiFi
-#define WIFI_AP "VIRUS"  // replace with your setting
+#define WIFI_AP "****"  // replace with your setting
 #define WIFI_PWD "MINBIOCABANON"  // replace with your setting
 
 //----------------------------------------------------------------------
