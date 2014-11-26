@@ -16,7 +16,7 @@
 #define BASE_LON_DIR	'E'
 
 // Phone number to call or for SMS
-#define MYPHONENUMBER	"0630213069"
+#define MYPHONENUMBER	"+33630213069"
 
 // SMS Menu
 #define SMSSECRET	"1234"
@@ -34,8 +34,8 @@
 struct EEPROM_param {
 	bool flag_data_written;		// when true, this structure contains data. Should be false only at the very first start
 	bool flag_alarm_onoff;		// 1 = alarm on ; 0 = alarm off
-	char smssecret[4];
-	char myphonenumber[10];	
+	char smssecret[5];
+	char myphonenumber[13];	
 	float base_lat;
 	char base_lat_dir;
 	float base_lon;

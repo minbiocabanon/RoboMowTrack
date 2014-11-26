@@ -29,6 +29,7 @@
 #define	PERIOD_TEST_GEOFENCING	120000	// interval between 2 geofencing check
 #define PERIOD_BAT_INFO			120000	// interval between 2 battery level measurement
 #define PERIOD_CHECK_SMS		2000	// interval between 2 SMS check
+#define TIMEOUT_SMS_MENU		60000	// When timeout, SMS menu return to login (user should send password again to log)
 
 gpsSentenceInfoStruct info;
 char buff[256];
@@ -36,6 +37,7 @@ unsigned long taskGetGPS;
 unsigned long taskTestGeof;
 unsigned long taskGetBat;
 unsigned long taskCheckSMS;
+unsigned long TimeOutSMSMenu;
 
 
 
@@ -49,21 +51,21 @@ struct GPSPos {
 	int second;
 	int	num;
 	int fix;
-}MyGPSPos;
+	}MyGPSPos;
 
 
 struct Battery {
 	unsigned int bat_level;
 	unsigned int charging_status;
-}MyBattery;
+	}MyBattery;
 
 struct SMS {
-	bool flagSecret;
 	char message[256];
-	int menucmd;
+	char incomingnumber[13];
+	int menupos;
 	int menulevel;
-}MySMS;
-
+	}MySMS;
+	
 struct FlagReg {
 	bool taskGetGPS;	// flag to indicate when process to get GPS possition
 	bool taskGetBat;		// flag to indicate that we have to get battery level and charging status
@@ -72,7 +74,7 @@ struct FlagReg {
 	bool SMSReceived;	// flag to indicate that an SMS has been received
 	bool fix3D;			// flag to indicate if fix is 3D (at least) or not
 	bool PosOutiseArea;	// flag to indicate if fix is 3D (at least) or not
-}MyFlag;
+	}MyFlag;
 
 
 
@@ -86,8 +88,21 @@ enum FixQuality {
 	DR,			// 6 Dead Reckoning
 	Manual,		// 7
 	Simulation	// 8
-};
-FixQuality GPSfix;
+	}GPSfix;
+
+
+enum SMSMENU{
+	SM_NOSTATE,		//0
+	SM_LOGIN,			//1
+	SM_MENU_MAIN,		//2
+	SM_ACTION1,		//3
+	SM_ACTION2,		//4
+	SM_ACTION3,		//5
+	SM_ACTION4,		//6
+	SM_ACTION5,		//7
+	SM_ACTION6,		//8
+	SM_ACTION7			//9
+	};
 
 //----------------------------------------------------------------------
 //!\brief	returns distance in meters between two positions, both specified
@@ -282,7 +297,6 @@ void GetGPSPos(void){
 			MyFlag.fix3D = false;		
 		}
 		
-		char buff[256];
 		sprintf(buff, "Current position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir);
 		Serial.println(buff);
 		Serial.println();
@@ -318,7 +332,6 @@ void Geofencing(void){
 		Serial.println("-- Geofencing --"); 
 		//compute distance between actual position and reference position
 		float distance_base = DistanceBetween(MyParam.base_lat, MyParam.base_lon, MyGPSPos.latitude, MyGPSPos.longitude);
-		char buff[256];
 		sprintf(buff, "distance BASE->Robot: %.1f m", distance_base);
 		Serial.println(buff);
 		
@@ -349,11 +362,13 @@ void CheckSMSrecept(void){
 		MyFlag.taskCheckSMS = false;
 		char buf[20];
 		int v, i = 0; 
-		Serial.println("There is new message.");
+		Serial.println("--- SMS received ---");
 		// display Number part
 		LSMS.remoteNumber(buf, 20);
+		size_t destination_size = sizeof (MySMS.incomingnumber);
+		snprintf(MySMS.incomingnumber, destination_size, "%s", buf);
 		Serial.print("Number:");
-		Serial.println(buf);
+		Serial.println(MySMS.incomingnumber);
 		// display Content part
 		Serial.print("Content:");
 		//copy SMS to buffer
@@ -374,18 +389,78 @@ void CheckSMSrecept(void){
 }
 
 //----------------------------------------------------------------------
+//!\brief	Verify SMS password received
+//!\return  boolean true ou false
+//----------------------------------------------------------------------
+bool CheckSMSPassword(){
+	// size_t destination_size = sizeof (MyParam.smssecret);
+	// Serial.print("MyParam.smssecret=");
+	// for(int i = 0; i <= destination_size; i++)
+		// Serial.print(MyParam.smssecret[i]);
+
+	if( strcmp(MySMS.message, MyParam.smssecret) == 0)
+		return true;
+	else
+		return  false;
+}
+
+//----------------------------------------------------------------------
 //!\brief	Manage SMS menu
 //!\return  -
 //----------------------------------------------------------------------
 void MenuSMS(void){
 	// if a new message is received
 	if( MyFlag.SMSReceived == true ){
+		Serial.println("--- SMS Menu manager ---");
+		switch(MySMS.menupos){
+			case SM_NOSTATE:
+				break;
+			
+			case SM_LOGIN:
+				if( CheckSMSPassword() == true){
+					Serial.println("Password is OK.");
+					// password is OK, we can send main menu
+					MySMS.menupos = SM_MENU_MAIN;
+					sprintf(buff, "Main Menu \r\n1 : OK\r\n2 : NOK"); 
+					Serial.println(buff);
+					SendSMS(MySMS.incomingnumber, buff);
+					// start timer to auto-logout when no action occurs
+					TimeOutSMSMenu = millis();
+				}
+				else{
+					Serial.println("Wrong Password. Do nothing !");
+				}
+				break;
+			
+			case SM_MENU_MAIN:
+				break;
+		}
 	
 		// SMS read reset flag
 		MyFlag.SMSReceived = false;
 	}
 }
 
+//----------------------------------------------------------------------
+//!\brief	Send an SMS with specific number and message
+//!\param	phonenumber (char[]) 
+//!\param  	message (char[120])
+//!\return  true or false
+//----------------------------------------------------------------------
+bool SendSMS( const char *phonenumber, const char *message ){
+	LSMS.beginSMS(phonenumber);
+	LSMS.print(message);
+	bool ret;
+	if(LSMS.endSMS()){
+		Serial.println("SMS is sent");
+		ret = true;
+	}
+	else{
+		Serial.println("SMS is not sent");
+		ret = false;
+	}
+	return ret;
+}
 //----------------------------------------------------------------------
 //!\brief	Manage alert when occurs
 //!\return  -
@@ -395,18 +470,9 @@ void AlertMng(void){
 	if (MyFlag.PosOutiseArea){
 		MyFlag.PosOutiseArea = false;
 		Serial.println("AlertMng : start sending SMS"); 
-		
-		LSMS.beginSMS(MyParam.myphonenumber);
-		char SMSbuff[256];
-		sprintf(SMSbuff, "Robomow Alert !! current position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \n Bat = %d, status = %d", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.bat_level, MyBattery.charging_status); 
-		Serial.println(SMSbuff);
-		LSMS.print(SMSbuff);
-		if(LSMS.endSMS()){
-			Serial.println("SMS is sent"); 
-		}
-		else{
-			Serial.println("SMS is not sent");
-		}
+		sprintf(buff, "Robomow Alert !! current position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \n Bat = %d, status = %d", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.bat_level, MyBattery.charging_status); 
+		Serial.println(buff);
+		SendSMS(MyParam.myphonenumber, buff);
 	}
 }
 
@@ -434,6 +500,11 @@ void Scheduler() {
 		taskCheckSMS = millis();
 		MyFlag.taskCheckSMS = true;		
 	}
+	
+	if( ((millis() - TimeOutSMSMenu) > TIMEOUT_SMS_MENU) && MySMS.menupos != SM_LOGIN){
+		MySMS.menupos = SM_LOGIN;	
+		Serial.println("--- SMS Menu manger : Timeout ---");
+	}
 }
 
 //----------------------------------------------------------------------
@@ -442,6 +513,9 @@ void Scheduler() {
 void LoadParamEEPROM() {
 	
 	EEPROM_readAnything(0, MyParam);
+	
+	//uncomment this line to erase EEPROM parameters with DEFAULT parameters
+	//MyParam.flag_data_written = false;
 	
 	//check if parameters were already written
 	if( MyParam.flag_data_written == false ){
@@ -490,6 +564,8 @@ void setup() {
 	// load params from EEPROM
 	LoadParamEEPROM();
 	
+	// init default position in sms menu
+	MySMS.menupos = SM_LOGIN;
 	
 	// for scheduler
 	taskGetGPS = millis();
