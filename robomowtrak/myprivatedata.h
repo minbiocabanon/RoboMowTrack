@@ -19,7 +19,7 @@
 #define BASE_LON_DIR	'E'
 
 // Phone number to call or for SMS
-#define MYPHONENUMBER	"+33634681344"
+#define MYPHONENUMBER	"+33666666666"
 
 // SMS Menu
 #define SMSSECRET	"1234"

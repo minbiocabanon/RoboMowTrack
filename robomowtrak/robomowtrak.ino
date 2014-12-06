@@ -32,7 +32,8 @@
 #define TIMEOUT_SMS_MENU		300000	// When timeout, SMS menu return to login (user should send password again to log)
 
 // SMS menu architecture
-#define TXT_MAIN_MENU	"Main Menu \r\n1 : Status\r\n2 : Alarm ON\r\n3 : Alarm OFF"
+#define TXT_MAIN_MENU	"Main Menu\r\n1 : Status\r\n2 : Alarm ON\r\n3 : Alarm OFF\r\n4 : Params"
+#define TXT_PARAMS_MENU "Params Menu\r\n5 : Change default Num\r\n6 : Change coord.\r\n7 : Change radius\r\n8 : Change secret"
 
 gpsSentenceInfoStruct info;
 char buff[256];
@@ -98,13 +99,10 @@ enum SMSMENU{
 	SM_NOSTATE,		//0
 	SM_LOGIN,		//1
 	SM_MENU_MAIN,	//2
-	SM_ACTION1,		//3
-	SM_ACTION2,		//4
-	SM_ACTION3,		//5
-	SM_ACTION4,		//6
-	SM_ACTION5,		//7
-	SM_ACTION6,		//8
-	SM_ACTION7		//9
+	SM_CHG_NUM,		//3
+	SM_CHG_COORD,	//4
+	SM_CHG_RADIUS,	//5
+	SM_CHG_SECRET	//6
 	};
 
 enum CMDSMS{
@@ -112,12 +110,11 @@ enum CMDSMS{
 	CMD_STATUS,			//1
 	CMD_ALM_ON,			//2
 	CMD_ALM_OFF,		//3
-	CMD_ACTION2,		//4
-	CMD_ACTION3,		//5
-	CMD_ACTION4,		//6
-	CMD_ACTION5,		//7
-	CMD_ACTION6,		//8
-	CMD_ACTION7			//9
+	CMD_PARAMS,			//4
+	CMD_CHG_NUM,		//5
+	CMD_CHG_COORD,		//6
+	CMD_CHG_RADIUS,		//7
+	CMD_CHG_SECRET		//8
 	};	
 
 //----------------------------------------------------------------------
@@ -129,23 +126,23 @@ enum CMDSMS{
 //!\return	meters (float)
 //---------------------------------------------------------------------- 
 float DistanceBetween(float lat1, float long1, float lat2, float long2){
-  // Courtesy of Maarten Lamers
-  float delta = radians(long1-long2);
-  float sdlong = sin(delta);
-  float cdlong = cos(delta);
-  lat1 = radians(lat1);
-  lat2 = radians(lat2);
-  float slat1 = sin(lat1);
-  float clat1 = cos(lat1);
-  float slat2 = sin(lat2);
-  float clat2 = cos(lat2);
-  delta = (clat1 * slat2) - (slat1 * clat2 * cdlong);
-  delta = sq(delta);
-  delta += sq(clat2 * sdlong);
-  delta = sqrt(delta);
-  float denom = (slat1 * slat2) + (clat1 * clat2 * cdlong);
-  delta = atan2(delta, denom);
-  return delta * 6372795;
+	// Courtesy of Maarten Lamers
+	float delta = radians(long1-long2);
+	float sdlong = sin(delta);
+	float cdlong = cos(delta);
+	lat1 = radians(lat1);
+	lat2 = radians(lat2);
+	float slat1 = sin(lat1);
+	float clat1 = cos(lat1);
+	float slat2 = sin(lat2);
+	float clat2 = cos(lat2);
+	delta = (clat1 * slat2) - (slat1 * clat2 * cdlong);
+	delta = sq(delta);
+	delta += sq(clat2 * sdlong);
+	delta = sqrt(delta);
+	float denom = (slat1 * slat2) + (clat1 * clat2 * cdlong);
+	delta = atan2(delta, denom);
+	return delta * 6372795;
 }
 
 //----------------------------------------------------------------------
@@ -251,7 +248,7 @@ void parseGPGGA(const char* GPGGAstr){
 		//get lat/lon direction
 		tmp = getComma(3, GPGGAstr);
 		MyGPSPos.latitude_dir = (GPGGAstr[tmp]);
-		tmp = getComma(5, GPGGAstr);		
+		tmp = getComma(5, GPGGAstr);
 		MyGPSPos.longitude_dir = (GPGGAstr[tmp]);
 		
 		//sprintf(buff, "latitude = %10.4f-%c, longitude = %10.4f-%c", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir);
@@ -296,10 +293,10 @@ void convertCoords(float latitude, float longitude, float &lat_return, float &lo
 void GetGPSPos(void){
 	// For one second we parse GPS data and report some key values
 	if(MyFlag.taskGetGPS){
-		MyFlag.taskGetGPS = false;		
+		MyFlag.taskGetGPS = false;
 		Serial.println("--- LGPS loop ---"); 
 		LGPS.getData(&info);
-		Serial.print((char*)info.GPGGA); 
+		//Serial.print((char*)info.GPGGA); 
 		parseGPGGA((const char*)info.GPGGA);
 				
 		//check fix 
@@ -310,9 +307,8 @@ void GetGPSPos(void){
 		}
 		else{
 			//reset flag 
-			MyFlag.fix3D = false;		
+			MyFlag.fix3D = false;
 		}
-		
 		sprintf(buff, "Current position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir);
 		Serial.println(buff);
 		Serial.println();
@@ -406,20 +402,179 @@ void CheckSMSrecept(void){
 	}
 }
 
-//----------------------------------------------------------------------
-//!\brief	Verify SMS password received
-//!\return  boolean true ou false
-//----------------------------------------------------------------------
-bool CheckSMSPassword(){
-	// size_t destination_size = sizeof (MyParam.smssecret);
-	// Serial.print("MyParam.smssecret=");
-	// for(int i = 0; i <= destination_size; i++)
-		// Serial.print(MyParam.smssecret[i]);
 
-	if( strcmp(MySMS.message, MyParam.smssecret) == 0)
-		return true;
-	else
-		return  false;
+//----------------------------------------------------------------------
+//!\brief	Proceed to change number in EEPROM from sms command
+//!\brief	MySMS.message should contain : +33---old---,+33---new---
+//!\return  -
+//----------------------------------------------------------------------
+void ProcessChgNum(){
+
+	//check lengh before split
+	if( sizeof (MySMS.message) == 26 ){
+		// Read each command pair 
+		char* command = strtok(MySMS.message, ",");	
+		printf ("old num : %s\n",command);
+		
+		//compare old number with the one stored in EEPROM
+		if( strcmp(command, MyParam.myphonenumber) == 0){
+			// old is OK , we can store new number in EEPROM
+			// Find the next command in input string
+			command = strtok (NULL, ",");
+			printf ("new num : %s\n",command);
+			size_t destination_size = sizeof (MyParam.myphonenumber);
+			snprintf(MyParam.myphonenumber, destination_size, "%s", command);
+			//Save change in EEPROM
+			EEPROM_writeAnything(0, MyParam);
+			Serial.println("New number saved in EEPROM");
+			sprintf(buff, "New phone number saved : %s", MyParam.myphonenumber); 
+			Serial.println(buff);
+			//send SMS
+			SendSMS(MySMS.incomingnumber, buff);	
+			//change state machine to Main_menu
+			MySMS.menupos = SM_MENU_MAIN;			
+		}
+		else{
+			sprintf(buff, "Error in old phone number : %s.\r\n%s", command, TXT_MAIN_MENU); 
+			Serial.println(buff);
+			//send SMS
+			SendSMS(MySMS.incomingnumber, buff);	
+			//change state machine to Main_menu
+			MySMS.menupos = SM_MENU_MAIN;			
+		}
+	}
+	else{
+		sprintf(buff, "Error in size parameters : %s.\r\n%s", MySMS.message, TXT_MAIN_MENU); 
+		Serial.println(buff);
+		//send SMS
+		SendSMS(MySMS.incomingnumber, buff);	
+		//change state machine to Main_menu
+		MySMS.menupos = SM_MENU_MAIN;
+	}
+}
+
+//----------------------------------------------------------------------
+//!\brief	Proceed to change coordinates of main area in EEPROM from sms command
+//!\brief	MySMS.message should contain : 49.791489,N,179.1077,E
+//!\return  -
+//----------------------------------------------------------------------
+void ProcessChgCoord(){
+
+	//check lengh before split
+	if( sizeof (MySMS.message) <= 23 ){
+		float newlat, newlon;
+		char newlatdir, newlondir;
+		
+		// Read lat (string)
+		char* command = strtok(MySMS.message, ",");
+		//convert to lat float
+		newlat = atof(command);
+		printf ("lat : %f\n",newlat);
+		
+		// Read next field : lat direction
+		command = strtok(MySMS.message, ",");
+		//copy only the dir to char
+		newlatdir = command[0];
+		printf ("lat_dir : %c\n",newlatdir);
+		
+		// Find the next field : lon
+		command = strtok (NULL, ",");
+		//convert to lon float
+		newlon = atof(command);
+		printf ("lon : %f\n",newlon);
+
+		// Read next field : lon direction
+		command = strtok(MySMS.message, ",");
+		//copy only the dir to char
+		newlondir = command[0];
+		printf ("lat_dir : %c\n",newlondir);
+		
+		// proceed to a global check
+		if( (newlatdir == 'N' || newlatdir == 'n' || newlatdir == 'S' || newlatdir == 's') && (newlondir == 'E' || newlondir == 'e' || newlondir == 'W' || newlondir == 'w') && ( newlat >= 0.0 && newlat < 90.0 ) && ( newlon >= 0.0 && newlat < 180.0) ){
+			// say it's ok
+			printf ("Data checked !\n");
+			MyParam.base_lat = newlat;
+			MyParam.base_lat_dir = newlatdir;
+			MyParam.base_lon = newlon;
+			MyParam.base_lon_dir = newlondir;
+			//prepare SMS to confirm data are OK
+			sprintf(buff, "New coord. saved : %f,%c,%f,%c \r\n%s", newlat, newlatdir, newlon, newlondir, TXT_MAIN_MENU); 
+			Serial.println(buff);
+			//send SMS
+			SendSMS(MySMS.incomingnumber, buff);	
+			//change state machine to Main_menu
+			MySMS.menupos = SM_MENU_MAIN;			
+			//Save change in EEPROM
+			EEPROM_writeAnything(0, MyParam);
+			Serial.println("New coord. saved in EEPROM");
+		}
+		else{
+			sprintf(buff, "Data error : %f,%c,%f,%c \r\n%s", newlat, newlatdir, newlon, newlondir, TXT_MAIN_MENU); 
+			Serial.println(buff);
+			//send SMS
+			SendSMS(MySMS.incomingnumber, buff);	
+			//change state machine to Main_menu
+			MySMS.menupos = SM_MENU_MAIN;			
+		}
+	}
+	else{
+		sprintf(buff, "Error in size parameters : %s.\r\n%s", MySMS.message, TXT_MAIN_MENU); 
+		Serial.println(buff);
+		//send SMS
+		SendSMS(MySMS.incomingnumber, buff);	
+		//change state machine to Main_menu
+		MySMS.menupos = SM_MENU_MAIN;
+	}
+}
+
+//----------------------------------------------------------------------
+//!\brief	Proceed to change secret code in EEPROM from sms command
+//!\brief	MySMS.message should contain : oldcode,newcode
+//!\return  -
+//----------------------------------------------------------------------
+void ProcessChgSecret(){
+
+	//check lengh before split
+	if( sizeof (MySMS.message) == 10 ){
+		// Read each command pair 
+		char* command = strtok(MySMS.message, ",");	
+		printf ("old code : %s\n",command);
+		
+		//compare old number with the one stored in EEPROM
+		if( strcmp(command, MyParam.smssecret) == 0){
+			// old is OK , we can store new code in EEPROM
+			// Find the next command in input string
+			command = strtok (NULL, ",");
+			printf ("new code : %s\n",command);
+			size_t destination_size = sizeof (MyParam.smssecret);
+			snprintf(MyParam.smssecret, destination_size, "%s", command);
+			//Save change in EEPROM
+			EEPROM_writeAnything(0, MyParam);
+			Serial.println("New secret code saved in EEPROM");
+			sprintf(buff, "New secret code saved : %s", MyParam.myphonenumber); 
+			Serial.println(buff);
+			//send SMS
+			SendSMS(MySMS.incomingnumber, buff);	
+			//change state machine to Main_menu
+			MySMS.menupos = SM_MENU_MAIN;			
+		}
+		else{
+			sprintf(buff, "Error in old secret code : %s.\r\n%s", command, TXT_MAIN_MENU); 
+			Serial.println(buff);
+			//send SMS
+			SendSMS(MySMS.incomingnumber, buff);	
+			//change state machine to Main_menu
+			MySMS.menupos = SM_MENU_MAIN;			
+		}
+	}
+	else{
+		sprintf(buff, "Error in size parameters : %s.\r\n%s", MySMS.message, TXT_MAIN_MENU); 
+		Serial.println(buff);
+		//send SMS
+		SendSMS(MySMS.incomingnumber, buff);	
+		//change state machine to Main_menu
+		MySMS.menupos = SM_MENU_MAIN;
+	}
 }
 
 //----------------------------------------------------------------------
@@ -433,7 +588,6 @@ void ProcessMenuMain(void){
 		case CMD_STATUS:		//status
 			Serial.println("Status required ");
 			//convert flag_alarm_onoff
-
 			sprintf(flagalarm,"OFF");
 			if(MyParam.flag_alarm_onoff)
 				sprintf(flagalarm,"ON");
@@ -445,7 +599,7 @@ void ProcessMenuMain(void){
 			Serial.println("Alarm ON required");
 			MyParam.flag_alarm_onoff = true;
 			//convert flag_alarm_onoff
-			snprintf(flagalarm,3,"ON");			
+			snprintf(flagalarm,3,"ON");	
 			//prepare SMS content
 			sprintf(buff, "Alarm switch to %s state", flagalarm); 
 			Serial.println(buff);
@@ -453,25 +607,62 @@ void ProcessMenuMain(void){
 			SendSMS(MySMS.incomingnumber, buff);
 			//Save change in EEPROM
 			EEPROM_writeAnything(0, MyParam);
-			Serial.println("Data saved in EEPROM");		
+			Serial.println("Data saved in EEPROM");
 			break;
 		case CMD_ALM_OFF:		// alarm OFF
 			Serial.println("Alarm OFF required");
 			MyParam.flag_alarm_onoff = false;
 			//convert flag_alarm_onoff
-			snprintf(flagalarm,4,"OFF");			
+			snprintf(flagalarm,4,"OFF");
 			//prepare SMS content
-			sprintf(buff, "Alarm switch to %s state", flagalarm); 			
+			sprintf(buff, "Alarm switch to %s state", flagalarm); 
 			Serial.println(buff);
 			//send SMS
 			SendSMS(MySMS.incomingnumber, buff);
 			//Save change in EEPROM
 			EEPROM_writeAnything(0, MyParam);
-			Serial.println("Data saved in EEPROM");			
+			Serial.println("Data saved in EEPROM");	
 			break;
-		case CMD_ACTION2:
+		case CMD_PARAMS:	//go to sub menu params
+			sprintf(buff, TXT_PARAMS_MENU); 
+			Serial.println(buff);
+			SendSMS(MySMS.incomingnumber, buff);
 			break;
+		case CMD_CHG_NUM:
+			Serial.println("Change number");
+			//prepare SMS content
+			sprintf(buff, "Send : +336--old---,+336--new---"); 
+			Serial.println(buff);
+			//send SMS
+			SendSMS(MySMS.incomingnumber, buff);
+			MySMS.menupos = SM_CHG_NUM;
+			break;
+		case CMD_CHG_COORD:
+			Serial.println("Change coordinates");
+			//prepare SMS content
+			sprintf(buff, "Send : 49.791489,N,179.1077,E"); 
+			Serial.println(buff);
+			//send SMS
+			SendSMS(MySMS.incomingnumber, buff);
+			MySMS.menupos = SM_CHG_COORD;		
+			break;
+		case CMD_CHG_RADIUS:
+			break;
+		case CMD_CHG_SECRET:
+			Serial.println("Change secret code");
+			//prepare SMS content
+			sprintf(buff, "Send : oldcode,newcode\r\nLimit to 4 caracters."); 
+			Serial.println(buff);
+			//send SMS
+			SendSMS(MySMS.incomingnumber, buff);
+			MySMS.menupos = SM_CHG_SECRET;		
+			break;			
 		default:
+			//prepare SMS content
+			sprintf(buff, "Error"); 
+			Serial.println(buff);
+			//send SMS
+			SendSMS(MySMS.incomingnumber, buff);		
 			break;
 	}
 }
@@ -490,7 +681,9 @@ void MenuSMS(void){
 				break;
 			
 			case SM_LOGIN:
-				if( CheckSMSPassword() == true){
+				//compare secret code with received sms code
+				if( strcmp(MySMS.message, MyParam.smssecret) == 0 ){
+					// password is OK
 					Serial.println("Password is OK.");
 					// password is OK, we can send main menu
 					MySMS.menupos = SM_MENU_MAIN;
@@ -511,6 +704,27 @@ void MenuSMS(void){
 					Serial.println("Menu Main ");
 					ProcessMenuMain();
 				break;
+			
+			case SM_CHG_NUM:
+					// reload timer to avoid auto-logout
+					TimeOutSMSMenu = millis();
+					Serial.println("Proceed to change number");
+					ProcessChgNum();
+				break;
+				
+			case SM_CHG_COORD:
+					// reload timer to avoid auto-logout
+					TimeOutSMSMenu = millis();
+					Serial.println("Proceed to change coordinates");
+					ProcessChgCoord();
+				break;		
+
+			case SM_CHG_SECRET:
+					// reload timer to avoid auto-logout
+					TimeOutSMSMenu = millis();
+					Serial.println("Proceed to change secret code");
+					ProcessChgSecret();
+				break;	
 		}
 	
 		// SMS read reset flag
@@ -547,7 +761,7 @@ void AlertMng(void){
 	if ( MyParam.flag_alarm_onoff && MyFlag.PosOutiseArea){
 		MyFlag.PosOutiseArea = false;
 		Serial.println("AlertMng : start sending SMS"); 
-		sprintf(buff, "Robomow Alert !! current position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \n Bat = %d, status = %d", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.bat_level, MyBattery.charging_status); 
+		sprintf(buff, "Robomow Alert !! current position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \r\n Bat = %d, status = %d", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.bat_level, MyBattery.charging_status); 
 		Serial.println(buff);
 		SendSMS(MyParam.myphonenumber, buff);
 	}
@@ -565,22 +779,22 @@ void Scheduler() {
 	
 	if( (millis() - taskTestGeof) > PERIOD_TEST_GEOFENCING){
 		taskTestGeof = millis();
-		MyFlag.taskTestGeof = true;		
+		MyFlag.taskTestGeof = true;
 	}
 	
 	if( (millis() - taskGetBat) > PERIOD_BAT_INFO){
 		taskGetBat = millis();
-		MyFlag.taskGetBat = true;		
+		MyFlag.taskGetBat = true;
 	}	
 	
 	if( (millis() - taskCheckSMS) > PERIOD_CHECK_SMS){
 		taskCheckSMS = millis();
-		MyFlag.taskCheckSMS = true;		
+		MyFlag.taskCheckSMS = true;
 	}
 	
 	if( ((millis() - TimeOutSMSMenu) > TIMEOUT_SMS_MENU) && MySMS.menupos != SM_LOGIN){
-		MySMS.menupos = SM_LOGIN;	
-		Serial.println("--- SMS Menu manger : Timeout ---");
+		MySMS.menupos = SM_LOGIN;
+		Serial.println("--- SMS Menu manager : Timeout ---");
 	}
 }
 
@@ -603,7 +817,7 @@ void LoadParamEEPROM() {
 		size_t destination_size = sizeof (MyParam.smssecret);
 		snprintf(MyParam.smssecret, destination_size, "%s", SMSSECRET);
 		destination_size = sizeof (MyParam.myphonenumber);
-		snprintf(MyParam.myphonenumber, destination_size, "%s", MYPHONENUMBER);		
+		snprintf(MyParam.myphonenumber, destination_size, "%s", MYPHONENUMBER);
 		MyParam.base_lat = BASE_LAT;
 		MyParam.base_lat_dir = BASE_LAT_DIR;
 		MyParam.base_lon = BASE_LON;
@@ -615,10 +829,10 @@ void LoadParamEEPROM() {
 		
 		//SAVE IN EEPROM !
 		EEPROM_writeAnything(0, MyParam);
-		Serial.println("--- !!! DEFAULT parameters stored in EEPROM !!! --- ");		
+		Serial.println("--- !!! DEFAULT parameters stored in EEPROM !!! --- ");
 	}
 	else{
-		Serial.println("--- Parameters loaded from EEPROM --- ");		
+		Serial.println("--- Parameters loaded from EEPROM --- ");
 	}
 }
 
@@ -628,6 +842,7 @@ void LoadParamEEPROM() {
 void setup() {
 	// put your setup code here, to run once:
 	Serial.begin(115200);
+	delay(5000);
 	Serial.println("RoboMowTrak "); 
 	// GPS power on
 	LGPS.powerOn();
