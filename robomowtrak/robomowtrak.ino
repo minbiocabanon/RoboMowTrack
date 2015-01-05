@@ -444,7 +444,7 @@ void ProcessChgNum(){
 		}
 	}
 	else{
-		sprintf(buff, "Error in size parameters : %s.\r\n%s", MySMS.message, TXT_MAIN_MENU); 
+		sprintf(buff, "Error in size parameters (%d): %s.\r\n%s", sizeof (MySMS.message),MySMS.message, TXT_MAIN_MENU); 
 		Serial.println(buff);
 		//send SMS
 		SendSMS(MySMS.incomingnumber, buff);	
@@ -853,6 +853,12 @@ void setup() {
 		delay(1000);
 	Serial.println("SIM ready for work!");	
 	
+	Serial.println("Removing SMS received ...");
+	//delete ALL sms received while powered off
+	while(LSMS.available()){
+		LSMS.flush(); // delete message
+	}
+	
 	// load params from EEPROM
 	LoadParamEEPROM();
 	
@@ -865,6 +871,7 @@ void setup() {
 	taskGetBat = millis();
 	taskCheckSMS = millis();
 	
+	Serial.println("Setup done.");	
 }
 
 //----------------------------------------------------------------------
