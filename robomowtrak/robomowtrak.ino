@@ -33,7 +33,7 @@
 
 // SMS menu architecture
 #define TXT_MAIN_MENU	"Main Menu\r\n1 : Status\r\n2 : Alarm ON\r\n3 : Alarm OFF\r\n4 : Params"
-#define TXT_PARAMS_MENU "Params Menu\r\n5 : Change default Num\r\n6 : Change coord.\r\n7 : Change radius\r\n8 : Change secret\r\n9 : Restore factory defaults"
+#define TXT_PARAMS_MENU "Params Menu\r\n5 : Change default Num\r\n6 : Change coord.\r\n7 : Change radius\r\n8 : Change secret\r\n9 : Restore factory settings"
 
 gpsSentenceInfoStruct info;
 char buff[256];
@@ -583,7 +583,7 @@ void ProcessChgSecret(){
 }
 
 //----------------------------------------------------------------------
-//!\brief	Proceed to restore all factor default parameters 
+//!\brief	Proceed to restore all factory settings 
 //!\brief	MySMS.message should contain : y or n (Y or N)
 //!\return  -
 //----------------------------------------------------------------------
@@ -609,7 +609,7 @@ void ProcessRestoreDefault(){
 			PrintMyParam();	
 			
 			//prepare an sms to confirm
-			sprintf(buff, "Parameters restored to factory defaults!!\r\n"); 
+			sprintf(buff, "Parameters restored to factory settings!!\r\n"); 
 			Serial.println(buff);			
 		}
 		else{ 
@@ -718,9 +718,8 @@ void ProcessMenuMain(void){
 			MySMS.menupos = SM_CHG_SECRET;		
 			break;
 		case CMD_RESTORE_DFLT:
-			Serial.println("CONFIRM RESTORE DEFAULT PARAMS Y/N ?");
 			//prepare SMS content
-			sprintf(buff, "CONFIRM RESTORE DEFAULT PARAMS Y/N ?"); 
+			sprintf(buff, "CONFIRM RESTORE DEFAULT SETTINGS Y/N ?"); 
 			Serial.println(buff);
 			//send SMS
 			SendSMS(MySMS.incomingnumber, buff);
@@ -797,7 +796,7 @@ void MenuSMS(void){
 			case SM_RESTORE_DFLT:
 					// reload timer to avoid auto-logout
 					TimeOutSMSMenu = millis();
-					Serial.println("Proceed to restore default parameters");
+					Serial.println("Proceed to restore default settings");
 					ProcessRestoreDefault();				
 				break;
 		}
