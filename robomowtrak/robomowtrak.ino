@@ -496,7 +496,7 @@ void ProcessChgCoord(){
 		// proceed to a global check
 		if( (newlatdir == 'N' || newlatdir == 'n' || newlatdir == 'S' || newlatdir == 's') && (newlondir == 'E' || newlondir == 'e' || newlondir == 'W' || newlondir == 'w') && ( newlat >= 0.0 && newlat < 90.0 ) && ( newlon >= 0.0 && newlat < 180.0) ){
 			// say it's ok
-			Serial.prinln(" Data checked !");
+			Serial.println(" Data checked !");
 			MyParam.base_lat = newlat;
 			MyParam.base_lat_dir = newlatdir;
 			MyParam.base_lon = newlon;
@@ -601,6 +601,9 @@ void ProcessRestoreDefault(){
 			//little trick : use LoadParamEEPROM function with the flat_data_written forced to false
 			// this will act as the very first boot 
 			MyParam.flag_data_written = false;
+			//SAVE IN EEPROM !
+			EEPROM_writeAnything(0, MyParam);
+			// then load default param in EEPROM
 			LoadParamEEPROM();
 			//print structure
 			PrintMyParam();	
