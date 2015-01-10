@@ -11,6 +11,7 @@
 
 // Alarm allowed ?
 #define FLAG_ALARM_ONOFF	1	// 1 = alarm allowed , 0 = alarme not allowed (will not send SMS)
+#define FLAG_PERIODIC_STATUS_ONOFF	1	// 1 = periodic status allowed , 0 = periodic status not allowed (will not send SMS)
 
 // Lat/Lon station position (for geofencing)
 #define BASE_LAT	43.12489		
@@ -37,6 +38,7 @@
 struct EEPROM_param {
 	bool flag_data_written;		// when true, this structure contains data. Should be false only at the very first start
 	bool flag_alarm_onoff;		// 1 = alarm on ; 0 = alarm off
+	bool flag_periodic_status_onoff;	// 1 = periodic status on ; 0 = periodic status off	
 	char smssecret[5];
 	char myphonenumber[13];	
 	float base_lat;

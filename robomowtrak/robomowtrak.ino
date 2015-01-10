@@ -22,18 +22,19 @@
 #include "myprivatedata.h"
 
 //Params for geofencing
-#define RADIUS_MINI		20.0		// radius in meter where we consider that we are exactly parked in the area
-#define RADIUS_MAXI		80.0		// radius in meter for geofencing centered in BASE_LAT,BASE_LON. When GPS pos is outside this radius -> Alarm !
+#define RADIUS_MINI		20.0				// radius in meter where we consider that we are exactly parked in the area
+#define RADIUS_MAXI		80.0				// radius in meter for geofencing centered in BASE_LAT,BASE_LON. When GPS pos is outside this radius -> Alarm !
 
-#define	PERIOD_GET_GPS			5000	// interval between 2 GPS positions in milliseconds
-#define	PERIOD_TEST_GEOFENCING	120000	// interval between 2 geofencing check
-#define PERIOD_BAT_INFO			120000	// interval between 2 battery level measurement
-#define PERIOD_CHECK_SMS		2000	// interval between 2 SMS check
-#define TIMEOUT_SMS_MENU		300000	// When timeout, SMS menu return to login (user should send password again to log)
+#define	PERIOD_GET_GPS			5000		// interval between 2 GPS positions in milliseconds
+#define	PERIOD_TEST_GEOFENCING	120000		// interval between 2 geofencing check
+#define PERIOD_BAT_INFO			120000		// interval between 2 battery level measurement
+#define PERIOD_CHECK_SMS		2000		// interval between 2 SMS check
+#define PERIOD_STATUS_SMS		86400000	// interval for periodic status = 24 Hrs
+#define TIMEOUT_SMS_MENU		300000		// When timeout, SMS menu return to login (user should send password again to log)
 
 // SMS menu architecture
 #define TXT_MAIN_MENU	"Main Menu\r\n1 : Status\r\n2 : Alarm ON\r\n3 : Alarm OFF\r\n4 : Params"
-#define TXT_PARAMS_MENU "Params Menu\r\n5 : Change default Num\r\n6 : Change coord.\r\n7 : Change radius\r\n8 : Change secret\r\n9 : Restore factory settings"
+#define TXT_PARAMS_MENU "Params Menu\r\n5 : Change default Num\r\n6 : Change coord.\r\n7 : Change radius\r\n8 : Change secret\r\n9 : Periodic status ON \r\n10 : Periodic status OFF \r\n11 : Restore factory settings"
 
 gpsSentenceInfoStruct info;
 char buff[256];
@@ -41,6 +42,7 @@ unsigned long taskGetGPS;
 unsigned long taskTestGeof;
 unsigned long taskGetBat;
 unsigned long taskCheckSMS;
+unsigned long taskStatusSMS;
 unsigned long TimeOutSMSMenu;
 
 
@@ -75,6 +77,7 @@ struct FlagReg {
 	bool taskGetBat;		// flag to indicate that we have to get battery level and charging status
 	bool taskTestGeof;	// flag to indicate when process geofencing
 	bool taskCheckSMS;	// flag to indicate when check SMS
+	bool taskStatusSMS; // flat to indicate when it's time to send a periodic status SMS
 	bool SMSReceived;	// flag to indicate that an SMS has been received
 	bool fix3D;			// flag to indicate if fix is 3D (at least) or not
 	bool PosOutiseArea;	// flag to indicate if fix is 3D (at least) or not
@@ -113,7 +116,9 @@ enum CMDSMS{
 	CMD_CHG_COORD,		//6
 	CMD_CHG_RADIUS,		//7
 	CMD_CHG_SECRET,		//8
-	CMD_RESTORE_DFLT	//9
+	CMD_PERIODIC_STATUS_ON,	//9
+	CMD_PERIODIC_STATUS_OFF,//10
+	CMD_RESTORE_DFLT	//11
 	};	
 
 //----------------------------------------------------------------------
@@ -502,7 +507,7 @@ void ProcessChgCoord(){
 			MyParam.base_lon = newlon;
 			MyParam.base_lon_dir = newlondir;
 			//prepare SMS to confirm data are OK
-			sprintf(buff, " New coord. saved : %f,%c,%f,%c", newlat, newlatdir, newlon, newlondir); 
+			sprintf(buff, " New coord. saved : %2.6f,%c,%3.6f,%c", newlat, newlatdir, newlon, newlondir); 
 			Serial.println(buff);
 			//send SMS
 			SendSMS(MySMS.incomingnumber, buff);	
@@ -608,8 +613,8 @@ void ProcessRestoreDefault(){
 			//print structure
 			PrintMyParam();	
 			
-			//prepare an sms to confirm
-			sprintf(buff, "Parameters restored to factory settings!!\r\n"); 
+			//prepare an sms to confirm and display default password (it may has been changed)
+			sprintf(buff, "Parameters restored to factory settings!!\r\nSecret code: %s", MyParam.smssecret); 
 			Serial.println(buff);			
 		}
 		else{ 
@@ -655,6 +660,7 @@ void ProcessMenuMain(void){
 			Serial.println(buff);
 			SendSMS(MySMS.incomingnumber, buff);
 			break;
+			
 		case CMD_ALM_ON:		// alarm ON
 			Serial.println("Alarm ON required");
 			MyParam.flag_alarm_onoff = true;
@@ -669,6 +675,7 @@ void ProcessMenuMain(void){
 			EEPROM_writeAnything(0, MyParam);
 			Serial.println("Data saved in EEPROM");
 			break;
+			
 		case CMD_ALM_OFF:		// alarm OFF
 			Serial.println("Alarm OFF required");
 			MyParam.flag_alarm_onoff = false;
@@ -688,6 +695,7 @@ void ProcessMenuMain(void){
 			Serial.println(buff);
 			SendSMS(MySMS.incomingnumber, buff);
 			break;
+			
 		case CMD_CHG_NUM:
 			Serial.println("Change number");
 			//prepare SMS content
@@ -697,6 +705,7 @@ void ProcessMenuMain(void){
 			SendSMS(MySMS.incomingnumber, buff);
 			MySMS.menupos = SM_CHG_NUM;
 			break;
+			
 		case CMD_CHG_COORD:
 			Serial.println("Change coordinates");
 			//prepare SMS content
@@ -706,8 +715,11 @@ void ProcessMenuMain(void){
 			SendSMS(MySMS.incomingnumber, buff);
 			MySMS.menupos = SM_CHG_COORD;		
 			break;
+			
 		case CMD_CHG_RADIUS:
+			// TO DO !!!
 			break;
+			
 		case CMD_CHG_SECRET:
 			Serial.println("Change secret code");
 			//prepare SMS content
@@ -717,6 +729,37 @@ void ProcessMenuMain(void){
 			SendSMS(MySMS.incomingnumber, buff);
 			MySMS.menupos = SM_CHG_SECRET;		
 			break;
+			
+		case CMD_PERIODIC_STATUS_ON:
+			Serial.println("Periodic status ON required");
+			MyParam.flag_periodic_status_onoff = true;
+			//convert flag_periodic_status_onoff
+			snprintf(flagalarm,4,"ON");
+			//prepare SMS content
+			sprintf(buff, "Periodic status switch to %s state", flagalarm); 
+			Serial.println(buff);
+			//send SMS
+			SendSMS(MySMS.incomingnumber, buff);
+			//Save change in EEPROM
+			EEPROM_writeAnything(0, MyParam);
+			Serial.println("Data saved in EEPROM");	
+			break;
+
+		case CMD_PERIODIC_STATUS_OFF:
+			Serial.println("Periodic status OFF required");
+			MyParam.flag_periodic_status_onoff = false;
+			//convert flag_periodic_status_onoff
+			snprintf(flagalarm,4,"OFF");
+			//prepare SMS content
+			sprintf(buff, "Periodic status switch to %s state", flagalarm); 
+			Serial.println(buff);
+			//send SMS
+			SendSMS(MySMS.incomingnumber, buff);
+			//Save change in EEPROM
+			EEPROM_writeAnything(0, MyParam);
+			Serial.println("Data saved in EEPROM");	
+			break;	
+			
 		case CMD_RESTORE_DFLT:
 			//prepare SMS content
 			sprintf(buff, "CONFIRM RESTORE DEFAULT SETTINGS Y/N ?"); 
@@ -724,7 +767,8 @@ void ProcessMenuMain(void){
 			//send SMS
 			SendSMS(MySMS.incomingnumber, buff);
 			MySMS.menupos = SM_RESTORE_DFLT;		
-			break;			
+			break;
+			
 		default:
 			//prepare SMS content
 			sprintf(buff, "Error"); 
@@ -767,37 +811,38 @@ void MenuSMS(void){
 				break;
 			
 			case SM_MENU_MAIN:
-					// reload timer to avoid auto-logout
-					TimeOutSMSMenu = millis();
-					Serial.println("Menu Main ");
-					ProcessMenuMain();
+				// reload timer to avoid auto-logout
+				TimeOutSMSMenu = millis();
+				Serial.println("Menu Main ");
+				ProcessMenuMain();
 				break;
 			
 			case SM_CHG_NUM:
-					// reload timer to avoid auto-logout
-					TimeOutSMSMenu = millis();
-					Serial.println("Proceed to change number");
-					ProcessChgNum();
+				// reload timer to avoid auto-logout
+				TimeOutSMSMenu = millis();
+				Serial.println("Proceed to change number");
+				ProcessChgNum();
 				break;
 				
 			case SM_CHG_COORD:
-					// reload timer to avoid auto-logout
-					TimeOutSMSMenu = millis();
-					Serial.println("Proceed to change coordinates");
-					ProcessChgCoord();
+				// reload timer to avoid auto-logout
+				TimeOutSMSMenu = millis();
+				Serial.println("Proceed to change coordinates");
+				ProcessChgCoord();
 				break;		
 
 			case SM_CHG_SECRET:
-					// reload timer to avoid auto-logout
-					TimeOutSMSMenu = millis();
-					Serial.println("Proceed to change secret code");
-					ProcessChgSecret();
+				// reload timer to avoid auto-logout
+				TimeOutSMSMenu = millis();
+				Serial.println("Proceed to change secret code");
+				ProcessChgSecret();
 				break;
+				
 			case SM_RESTORE_DFLT:
-					// reload timer to avoid auto-logout
-					TimeOutSMSMenu = millis();
-					Serial.println("Proceed to restore default settings");
-					ProcessRestoreDefault();				
+				// reload timer to avoid auto-logout
+				TimeOutSMSMenu = millis();
+				Serial.println("Proceed to restore default settings");
+				ProcessRestoreDefault();				
 				break;
 		}
 	
@@ -840,37 +885,22 @@ void AlertMng(void){
 		Serial.println(buff);
 		SendSMS(MyParam.myphonenumber, buff);
 	}
-}
-
-//----------------------------------------------------------------------
-//!\brief           scheduler()
-//----------------------------------------------------------------------
-void Scheduler() {
-
-	if( (millis() - taskGetGPS) > PERIOD_GET_GPS){
-		taskGetGPS = millis();
-		MyFlag.taskGetGPS = true;
-	}
 	
-	if( (millis() - taskTestGeof) > PERIOD_TEST_GEOFENCING){
-		taskTestGeof = millis();
-		MyFlag.taskTestGeof = true;
-	}
-	
-	if( (millis() - taskGetBat) > PERIOD_BAT_INFO){
-		taskGetBat = millis();
-		MyFlag.taskGetBat = true;
+	// if periodic status sms is required
+	if ( MyParam.flag_periodic_status_onoff && MyFlag.taskStatusSMS){
+		// reset flag
+		MyFlag.taskStatusSMS = false;
+		char flagalarm[4];
+		//convert flag_alarm_onoff
+		sprintf(flagalarm,"OFF");
+		//convert bit to string
+		if(MyParam.flag_alarm_onoff)
+			sprintf(flagalarm,"ON");		
+		Serial.println("AlertMng : periodic status SMS"); 
+		sprintf(buff, "Periodic status : \r\nCurrent position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \r\nBat = %d, status = %d\r\nAlarm is %s.", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.bat_level, MyBattery.charging_status, flagalarm); 
+		Serial.println(buff);
+		SendSMS(MyParam.myphonenumber, buff);
 	}	
-	
-	if( (millis() - taskCheckSMS) > PERIOD_CHECK_SMS){
-		taskCheckSMS = millis();
-		MyFlag.taskCheckSMS = true;
-	}
-	
-	if( ((millis() - TimeOutSMSMenu) > TIMEOUT_SMS_MENU) && MySMS.menupos != SM_LOGIN){
-		MySMS.menupos = SM_LOGIN;
-		Serial.println("--- SMS Menu manager : Timeout ---");
-	}
 }
 
 //----------------------------------------------------------------------
@@ -888,7 +918,7 @@ void LoadParamEEPROM() {
 		Serial.println("--- !!! Loading DEFAULT parameters from EEPROM ...  --- ");
 		//EEPROM is empty , so load default parameters (see myprivatedata.h)
 		MyParam.flag_alarm_onoff = FLAG_ALARM_ONOFF;
-		
+		MyParam.flag_periodic_status_onoff = FLAG_PERIODIC_STATUS_ONOFF;		
 		size_t destination_size = sizeof (MyParam.smssecret);
 		snprintf(MyParam.smssecret, destination_size, "%s", SMSSECRET);
 		destination_size = sizeof (MyParam.myphonenumber);
@@ -925,6 +955,12 @@ void PrintMyParam() {
 	Serial.println(buff);
 	sprintf(flag,"OFF");
 	//convert bit to string
+	if(MyParam.flag_periodic_status_onoff)
+		sprintf(flag,"ON");	
+	sprintf(buff, "  flag_periodic_status_onoff = %s", flag);
+	Serial.println(buff);	
+	sprintf(flag,"OFF");
+	//convert bit to string
 	if(MyParam.flag_alarm_onoff)
 		sprintf(flag,"ON");	
 	sprintf(buff, "  flag_alarm_onoff = %s", flag);
@@ -933,17 +969,54 @@ void PrintMyParam() {
 	Serial.println(buff);
 	sprintf(buff, "  myphonenumber = %s", MyParam.myphonenumber);
 	Serial.println(buff);
-	sprintf(buff, "  base_lat = %f", MyParam.base_lat);
+	sprintf(buff, "  base_lat = %2.6f", MyParam.base_lat);
 	Serial.println(buff);
 	sprintf(buff, "  base_lat_dir = %c", MyParam.base_lat_dir);
 	Serial.println(buff);
-	sprintf(buff, "  base_lon = %f", MyParam.base_lon);
+	sprintf(buff, "  base_lon = %3.6f", MyParam.base_lon);
 	Serial.println(buff);
 	sprintf(buff, "  base_lon_dir = %c", MyParam.base_lon_dir);
 	Serial.println(buff);
 	sprintf(buff, "  bat_level_trig = %d", MyParam.bat_level_trig);
 	Serial.println(buff);
 }
+
+//----------------------------------------------------------------------
+//!\brief           scheduler()
+//----------------------------------------------------------------------
+void Scheduler() {
+
+	if( (millis() - taskGetGPS) > PERIOD_GET_GPS){
+		taskGetGPS = millis();
+		MyFlag.taskGetGPS = true;
+	}
+	
+	if( (millis() - taskTestGeof) > PERIOD_TEST_GEOFENCING){
+		taskTestGeof = millis();
+		MyFlag.taskTestGeof = true;
+	}
+	
+	if( (millis() - taskGetBat) > PERIOD_BAT_INFO){
+		taskGetBat = millis();
+		MyFlag.taskGetBat = true;
+	}	
+	
+	if( (millis() - taskCheckSMS) > PERIOD_CHECK_SMS){
+		taskCheckSMS = millis();
+		MyFlag.taskCheckSMS = true;
+	}
+	
+	if( (millis() - taskStatusSMS) > PERIOD_STATUS_SMS){
+		taskStatusSMS = millis();
+		MyFlag.taskStatusSMS = true;
+	}
+	
+	if( ((millis() - TimeOutSMSMenu) > TIMEOUT_SMS_MENU) && MySMS.menupos != SM_LOGIN){
+		MySMS.menupos = SM_LOGIN;
+		Serial.println("--- SMS Menu manager : Timeout ---");
+	}
+}
+
 //----------------------------------------------------------------------
 //!\brief           SETUP()
 //----------------------------------------------------------------------
@@ -980,6 +1053,7 @@ void setup() {
 	taskTestGeof = millis();
 	taskGetBat = millis();
 	taskCheckSMS = millis();
+	taskStatusSMS = millis();
 	
 	// set this flag to proceed a first battery level read (if an SMS is received before timer occurs)
 	MyFlag.taskGetBat = true;
