@@ -12,7 +12,9 @@
 //!
 //! millis() overflow/reset over 50 days
 //--------------------------------------------------
-
+#include <LTask.h>
+#include "vmthread.h"
+#include "stddef.h"
 #include <LGPS.h>
 #include <LGSM.h>
 #include <LBattery.h>
@@ -20,6 +22,7 @@
 #include <LEEPROM.h>
 #include "EEPROMAnything.h"
 #include "myprivatedata.h"
+
 
 //Params for geofencing
 #define RADIUS_MINI		20.0				// radius in meter where we consider that we are exactly parked in the area
@@ -35,6 +38,9 @@
 // SMS menu architecture
 #define TXT_MAIN_MENU	"Main Menu\r\n1 : Status\r\n2 : Alarm ON\r\n3 : Alarm OFF\r\n4 : Params"
 #define TXT_PARAMS_MENU "Params Menu\r\n5 : Change default Num\r\n6 : Change coord.\r\n7 : Change radius\r\n8 : Change secret\r\n9 : Periodic status ON \r\n10 : Periodic status OFF \r\n11 : Restore factory settings"
+
+#define LEDGPS  13
+#define LEDALARM  12
 
 gpsSentenceInfoStruct info;
 char buff[256];
@@ -467,7 +473,7 @@ void ProcessChgCoord(){
 
 	//check lengh before split
 	if( strlen (MySMS.message) <= 22 ){
-		float newlat, newlon;
+		double newlat, newlon;
 		char newlatdir, newlondir;
 		
 		// Read lat (string)
@@ -1058,7 +1064,15 @@ void setup() {
 	// set this flag to proceed a first battery level read (if an SMS is received before timer occurs)
 	MyFlag.taskGetBat = true;
 	
+	//GPIO setup
+	pinMode(LEDGPS, OUTPUT);
+	pinMode(LEDALARM, OUTPUT);
+	
 	Serial.println("Setup done.");	
+	
+	//Serial.println("Launch threads.");		
+    // LTask will help you out with locking the mutex so you can access the global data
+    //LTask.remoteCall(createThread, NULL);
 }
 
 //----------------------------------------------------------------------
@@ -1073,4 +1087,59 @@ void loop() {
 	// SendGPS2Wifi();
 	Geofencing();
 	AlertMng();
+}
+
+//----------------------------------------------------------------------
+//!\brief           THREAD DECLARATION
+//----------------------------------------------------------------------
+boolean createThread(void* userdata) {
+        // The priority can be 1 - 255 and default priority are 0
+        // the arduino priority are 245
+        vm_thread_create(thread_ledgps, NULL, 255);
+		vm_thread_create(thread_ledalarm, NULL, 255);
+    return true;
+}
+
+//----------------------------------------------------------------------
+//!\brief           THREAD LED GPS
+//---------------------------------------------------------------------- 
+VMINT32 thread_ledgps(VM_THREAD_HANDLE thread_handle, void* user_data){
+    for (;;){
+		switch(MyGPSPos.fix){
+			case Invalid:
+				// blink led as pulse
+				// digitalWrite(LEDGPS, HIGH);
+				// delay(150);
+				// digitalWrite(LEDGPS, LOW);
+				// delay(850);
+				break;
+			case GPS:
+			case DGPS:
+			case PPS:
+			case RTK:
+			case FloatRTK:
+			case DR:
+			case Manual:
+			case Simulation:
+				// steady led
+				// digitalWrite(LEDGPS, HIGH);
+				// delay(1000);
+				break;					
+		}
+		sprintf(buff, "MyGPSPos.fix = %d", MyGPSPos.fix);
+		Serial.println(buff);
+		delay(1000);
+	}
+    return 0;
+}
+
+//----------------------------------------------------------------------
+//!\brief           THREAD LED ALARM
+//---------------------------------------------------------------------- 
+VMINT32 thread_ledalarm(VM_THREAD_HANDLE thread_handle, void* user_data){
+    for (;;){
+        // Serial.println("test thread");
+        // delay(2000);
+    }
+    return 0;
 }

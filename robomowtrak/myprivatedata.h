@@ -41,9 +41,9 @@ struct EEPROM_param {
 	bool flag_periodic_status_onoff;	// 1 = periodic status on ; 0 = periodic status off	
 	char smssecret[5];
 	char myphonenumber[13];	
-	float base_lat;
+	double base_lat;
 	char base_lat_dir;
-	float base_lon;
+	double base_lon;
 	char base_lon_dir;
 	int bat_level_trig;			// battery level, when trigged, should send an alarm
 }MyParam;
