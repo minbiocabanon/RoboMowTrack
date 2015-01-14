@@ -26,7 +26,7 @@
 
 //Params for geofencing
 #define RADIUS_MINI		20.0				// radius in meter where we consider that we are exactly parked in the area
-#define RADIUS_MAXI		80.0				// radius in meter for geofencing centered in BASE_LAT,BASE_LON. When GPS pos is outside this radius -> Alarm !
+#define RADIUS_MAXI		100.0				// radius in meter for geofencing centered in BASE_LAT,BASE_LON. When GPS pos is outside this radius -> Alarm !
 
 #define	PERIOD_GET_GPS			5000		// interval between 2 GPS positions in milliseconds
 #define	PERIOD_TEST_GEOFENCING	120000		// interval between 2 geofencing check
@@ -466,70 +466,104 @@ void ProcessChgNum(){
 
 //----------------------------------------------------------------------
 //!\brief	Proceed to change coordinates of main area in EEPROM from sms command
-//!\brief	MySMS.message should contain : 49.791489,N,179.1077,E
+//!\brief	MySMS.message should contain : 49.791489,N,179.1077,E or 'Here'
 //!\return  -
 //----------------------------------------------------------------------
 void ProcessChgCoord(){
 
-	//check lengh before split
+	// check lengh before split
 	if( strlen (MySMS.message) <= 22 ){
 		double newlat, newlon;
 		char newlatdir, newlondir;
 		
-		// Read lat (string)
+		// Read first field : could be a lat or 'here' word 
 		char* command = strtok(MySMS.message, ",");
-		//convert to lat float
-		newlat = atof(command);
-		sprintf(buff," lat : %2.6f",newlat);
-		Serial.println(buff);
-		
-		// Read next field : lat direction
-		command = strtok(NULL, ",");
-		//copy only the dir to char
-		newlatdir = command[0];
-		sprintf(buff," lat_dir : %c",newlatdir);
-		Serial.println(buff);
-		
-		// Find the next field : lon
-		command = strtok (NULL, ",");
-		//convert to lon float
-		newlon = atof(command);
-		sprintf(buff," lon : %3.6f",newlon);
-		Serial.println(buff);		
-
-		// Read next field : lon direction
-		command = strtok(NULL, ",");
-		//copy only the dir to char
-		newlondir = command[0];
-		sprintf(buff," lat_dir : %c",newlondir);
-		Serial.println(buff);
-		
-		// proceed to a global check
-		if( (newlatdir == 'N' || newlatdir == 'n' || newlatdir == 'S' || newlatdir == 's') && (newlondir == 'E' || newlondir == 'e' || newlondir == 'W' || newlondir == 'w') && ( newlat >= 0.0 && newlat < 90.0 ) && ( newlon >= 0.0 && newlat < 180.0) ){
-			// say it's ok
-			Serial.println(" Data checked !");
-			MyParam.base_lat = newlat;
-			MyParam.base_lat_dir = newlatdir;
-			MyParam.base_lon = newlon;
-			MyParam.base_lon_dir = newlondir;
-			//prepare SMS to confirm data are OK
-			sprintf(buff, " New coord. saved : %2.6f,%c,%3.6f,%c", newlat, newlatdir, newlon, newlondir); 
-			Serial.println(buff);
-			//send SMS
-			SendSMS(MySMS.incomingnumber, buff);	
-			//change state machine to Main_menu
-			MySMS.menupos = SM_MENU_MAIN;			
-			//Save change in EEPROM
-			EEPROM_writeAnything(0, MyParam);
-			Serial.println(" New coord. saved in EEPROM");
+		if( strcmp(command, "Here") == 0 || strcmp(command, "HERE") == 0 || strcmp(command, "here") == 0){
+			// check if GPS fix is good
+			if (MyFlag.fix3D) {
+				// say it's ok
+				Serial.println(" Save actual position as area position.");
+				MyParam.base_lat = MyGPSPos.latitude;
+				MyParam.base_lat_dir = MyGPSPos.latitude_dir;
+				MyParam.base_lon = MyGPSPos.longitude;
+				MyParam.base_lon_dir = MyGPSPos.longitude_dir;
+				// prepare SMS to confirm data are OK
+				sprintf(buff, " New coord. saved : %2.6f,%c,%3.6f,%c", MyParam.base_lat, MyParam.base_lat_dir, MyParam.base_lon, MyParam.base_lon_dir); 
+				Serial.println(buff);
+				// send SMS
+				SendSMS(MySMS.incomingnumber, buff);	
+				// change state machine to Main_menu
+				MySMS.menupos = SM_MENU_MAIN;			
+				// Save change in EEPROM
+				EEPROM_writeAnything(0, MyParam);
+				Serial.println(" New coord. saved in EEPROM");
+			}
+			else{
+				// say it's not OK because GPS is not fixed
+				// prepare SMS to confirm data are OK
+				sprintf(buff, " GPS not fixed, can't save position. Retry later"); 
+				Serial.println(buff);
+				// send SMS
+				SendSMS(MySMS.incomingnumber, buff);	
+				// change state machine to Main_menu
+				MySMS.menupos = SM_MENU_MAIN;
+			}
 		}
 		else{
-			sprintf(buff, " Data error : %f,%c,%f,%c", newlat, newlatdir, newlon, newlondir); 
+			// Command contain lat (string)
+			//convert to lat float
+			newlat = atof(command);
+			sprintf(buff," lat : %2.6f",newlat);
 			Serial.println(buff);
-			//send SMS
-			SendSMS(MySMS.incomingnumber, buff);	
-			//change state machine to Main_menu
-			MySMS.menupos = SM_MENU_MAIN;			
+			
+			// Read next field : lat direction
+			command = strtok(NULL, ",");
+			//copy only the dir to char
+			newlatdir = command[0];
+			sprintf(buff," lat_dir : %c",newlatdir);
+			Serial.println(buff);
+			
+			// Find the next field : lon
+			command = strtok (NULL, ",");
+			//convert to lon float
+			newlon = atof(command);
+			sprintf(buff," lon : %3.6f",newlon);
+			Serial.println(buff);		
+
+			// Read next field : lon direction
+			command = strtok(NULL, ",");
+			//copy only the dir to char
+			newlondir = command[0];
+			sprintf(buff," lat_dir : %c",newlondir);
+			Serial.println(buff);
+			
+			// proceed to a global check
+			if( (newlatdir == 'N' || newlatdir == 'n' || newlatdir == 'S' || newlatdir == 's') && (newlondir == 'E' || newlondir == 'e' || newlondir == 'W' || newlondir == 'w') && ( newlat >= 0.0 && newlat < 90.0 ) && ( newlon >= 0.0 && newlat < 180.0) ){
+				// say it's ok
+				Serial.println(" Data checked !");
+				MyParam.base_lat = newlat;
+				MyParam.base_lat_dir = newlatdir;
+				MyParam.base_lon = newlon;
+				MyParam.base_lon_dir = newlondir;
+				//prepare SMS to confirm data are OK
+				sprintf(buff, " New coord. saved : %2.6f,%c,%3.6f,%c", newlat, newlatdir, newlon, newlondir); 
+				Serial.println(buff);
+				//send SMS
+				SendSMS(MySMS.incomingnumber, buff);	
+				//change state machine to Main_menu
+				MySMS.menupos = SM_MENU_MAIN;			
+				//Save change in EEPROM
+				EEPROM_writeAnything(0, MyParam);
+				Serial.println(" New coord. saved in EEPROM");
+			}
+			else{
+				sprintf(buff, " Data error : %f,%c,%f,%c", newlat, newlatdir, newlon, newlondir); 
+				Serial.println(buff);
+				//send SMS
+				SendSMS(MySMS.incomingnumber, buff);	
+				//change state machine to Main_menu
+				MySMS.menupos = SM_MENU_MAIN;			
+			}
 		}
 	}
 	else{
@@ -715,7 +749,7 @@ void ProcessMenuMain(void){
 		case CMD_CHG_COORD:
 			Serial.println("Change coordinates");
 			//prepare SMS content
-			sprintf(buff, "Send : 49.791489,N,179.1077,E"); 
+			sprintf(buff, "Send : 49.791489,N,179.1077,E\r\nor 'Here', to set current position as new coord."); 
 			Serial.println(buff);
 			//send SMS
 			SendSMS(MySMS.incomingnumber, buff);
@@ -1040,7 +1074,7 @@ void setup() {
 		delay(1000);
 	Serial.println("SIM ready for work!");	
 	
-	Serial.println("Removing SMS received ...");
+	Serial.println("Deleting SMS received ...");
 	//delete ALL sms received while powered off
 	while(LSMS.available()){
 		LSMS.flush(); // delete message
@@ -1070,9 +1104,9 @@ void setup() {
 	
 	Serial.println("Setup done.");	
 	
-	//Serial.println("Launch threads.");		
     // LTask will help you out with locking the mutex so you can access the global data
-    //LTask.remoteCall(createThread, NULL);
+    LTask.remoteCall(createThread, NULL);
+	Serial.println("Launch threads.");
 }
 
 //----------------------------------------------------------------------
@@ -1096,7 +1130,7 @@ boolean createThread(void* userdata) {
         // The priority can be 1 - 255 and default priority are 0
         // the arduino priority are 245
         vm_thread_create(thread_ledgps, NULL, 255);
-		vm_thread_create(thread_ledalarm, NULL, 255);
+		//vm_thread_create(thread_ledalarm, NULL, 255);
     return true;
 }
 
@@ -1108,10 +1142,10 @@ VMINT32 thread_ledgps(VM_THREAD_HANDLE thread_handle, void* user_data){
 		switch(MyGPSPos.fix){
 			case Invalid:
 				// blink led as pulse
-				// digitalWrite(LEDGPS, HIGH);
-				// delay(150);
-				// digitalWrite(LEDGPS, LOW);
-				// delay(850);
+				digitalWrite(LEDGPS, HIGH);
+				delay(150);
+				digitalWrite(LEDGPS, LOW);
+				delay(850);
 				break;
 			case GPS:
 			case DGPS:
@@ -1122,13 +1156,14 @@ VMINT32 thread_ledgps(VM_THREAD_HANDLE thread_handle, void* user_data){
 			case Manual:
 			case Simulation:
 				// steady led
-				// digitalWrite(LEDGPS, HIGH);
-				// delay(1000);
+				digitalWrite(LEDGPS, HIGH);
+				delay(1000);
 				break;					
 		}
-		sprintf(buff, "MyGPSPos.fix = %d", MyGPSPos.fix);
-		Serial.println(buff);
-		delay(1000);
+		//DEBUG
+		// sprintf(buff, "MyGPSPos.fix = %d", MyGPSPos.fix);
+		// Serial.println(buff);
+		// delay(1000);
 	}
     return 0;
 }
