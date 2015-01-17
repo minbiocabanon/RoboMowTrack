@@ -12,6 +12,7 @@
 // Alarm allowed ?
 #define FLAG_ALARM_ONOFF	1	// 1 = alarm allowed , 0 = alarme not allowed (will not send SMS)
 #define FLAG_PERIODIC_STATUS_ONOFF	1	// 1 = periodic status allowed , 0 = periodic status not allowed (will not send SMS)
+#define FLAG_ALARM_LOW_BAT			1	// 1 = check input voltage level, set TRIG_INPUT_LEVEL to define treshol 	; 0 = no check
 
 // Lat/Lon station position (for geofencing)
 #define BASE_LAT	43.12489		
@@ -36,9 +37,10 @@
 //!\brief	Structure where user parameters are stored in EEPROM (tuned by SMS)
 //----------------------------------------------------------------------
 struct EEPROM_param {
-	bool flag_data_written;		// when true, this structure contains data. Should be false only at the very first start
-	bool flag_alarm_onoff;		// 1 = alarm on ; 0 = alarm off
+	bool flag_data_written;				// when true, this structure contains data. Should be false only at the very first start
+	bool flag_alarm_onoff;				// 1 = alarm on ; 0 = alarm off
 	bool flag_periodic_status_onoff;	// 1 = periodic status on ; 0 = periodic status off	
+	bool flag_alarm_low_bat;			// 1 = check input voltage (can be an external batt.) ; 0 = do not check input voltage
 	char smssecret[5];
 	char myphonenumber[13];	
 	double base_lat;
