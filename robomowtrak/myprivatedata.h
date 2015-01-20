@@ -15,7 +15,7 @@
 #define FLAG_ALARM_LOW_BAT			1	// 1 = check input voltage level, set TRIG_INPUT_LEVEL to define treshol 	; 0 = no check
 
 #define TRIG_INPUT_LEVEL			11.6	// in volt, when input voltage is lower than this value, an SMS alarm will be sent
-											// 11.6V is a good level trig for 12V lead acid battery. Set lower voltage at your own risk !
+				// 11.6V is a good level trig for 12V lead acid battery. Set lower voltage at your own risk !
 
 // Lat/Lon station position (for geofencing)
 #define BASE_LAT	43.12489		
@@ -30,7 +30,7 @@
 #define SMSSECRET	"1234"
 
 // battery level trigger for alarm , in %  , WARNING, LIPO level is only 100,66 and 33%
-#define LIPO_LEVEL_TRIG		30
+#define BAT_LEVEL_TRIG		30
 
 // WiFi
 #define WIFI_AP "****"  // replace with your setting

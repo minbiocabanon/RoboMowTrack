@@ -1083,7 +1083,7 @@ void LoadParamEEPROM() {
 		MyParam.base_lat_dir = BASE_LAT_DIR;
 		MyParam.base_lon = BASE_LON;
 		MyParam.base_lon_dir = BASE_LON_DIR;
-		MyParam.bat_level_trig = LIPO_LEVEL_TRIG;
+		MyParam.bat_level_trig = BAT_LEVEL_TRIG;
 	
 		//set flag that default data are stored
 		MyParam.flag_data_written = true;
