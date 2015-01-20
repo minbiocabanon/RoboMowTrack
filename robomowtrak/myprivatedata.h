@@ -14,6 +14,9 @@
 #define FLAG_PERIODIC_STATUS_ONOFF	1	// 1 = periodic status allowed , 0 = periodic status not allowed (will not send SMS)
 #define FLAG_ALARM_LOW_BAT			1	// 1 = check input voltage level, set TRIG_INPUT_LEVEL to define treshol 	; 0 = no check
 
+#define TRIG_INPUT_LEVEL			11.6	// in volt, when input voltage is lower than this value, an SMS alarm will be sent
+											// 11.6V is a good level trig for 12V lead acid battery. Set lower voltage at your own risk !
+
 // Lat/Lon station position (for geofencing)
 #define BASE_LAT	43.12489		
 #define BASE_LAT_DIR	'N'
@@ -26,8 +29,8 @@
 // SMS Menu
 #define SMSSECRET	"1234"
 
-// battery level trigger for alarm , in % 
-#define BAT_LEVEL_TRIG	20
+// battery level trigger for alarm , in %  , WARNING, LIPO level is only 100,66 and 33%
+#define LIPO_LEVEL_TRIG		30
 
 // WiFi
 #define WIFI_AP "****"  // replace with your setting

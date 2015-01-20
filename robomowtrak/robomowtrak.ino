@@ -22,7 +22,9 @@
 #include <LEEPROM.h>
 #include "EEPROMAnything.h"
 #include "myprivatedata.h"
+#include <LDateTime.h>
 
+#include <Time.h>
 
 //Params for geofencing
 #define RADIUS_MINI		20.0				// radius in meter where we consider that we are exactly parked in the area
@@ -47,7 +49,14 @@
 // Analog input
 #define VOLT_DIVIDER_INPUT		0.211281	// Voltage divider ratio for mesuring input voltage.
 
+// RTC
+datetimeInfo t;
+unsigned int rtc;
+
+// GPS
 gpsSentenceInfoStruct info;
+
+// Miscalleneous 
 char buff[256];
 unsigned long taskGetGPS;
 unsigned long taskTestGeof;
@@ -1074,7 +1083,7 @@ void LoadParamEEPROM() {
 		MyParam.base_lat_dir = BASE_LAT_DIR;
 		MyParam.base_lon = BASE_LON;
 		MyParam.base_lon_dir = BASE_LON_DIR;
-		MyParam.bat_level_trig = BAT_LEVEL_TRIG;
+		MyParam.bat_level_trig = LIPO_LEVEL_TRIG;
 	
 		//set flag that default data are stored
 		MyParam.flag_data_written = true;
@@ -1146,7 +1155,7 @@ void Scheduler() {
 
 	if( (millis() - taskGetGPS) > PERIOD_GET_GPS){
 		taskGetGPS = millis();
-		MyFlag.taskGetGPS = true;
+		MyFlag.taskGetGPS = true;	
 	}
 	
 	if( (millis() - taskTestGeof) > PERIOD_TEST_GEOFENCING){
