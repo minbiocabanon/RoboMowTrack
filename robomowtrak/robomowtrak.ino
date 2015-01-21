@@ -1,8 +1,12 @@
 //--------------------------------------------------
 //! \file		robomowtrak.ino
-//! \brief		GPS tracker for a robomow
-//! \brief		User GPS for localisation. Wifi for tracking/logging position while in my garden. When outsite my garden, use SMS to send alert.
-//! \date		2014-Nov
+//! \brief		GPS TRACKER
+//! \brief		Use GPS for localisation.
+//! \brief		Full configurable by SMS.
+//! \brief		SMS alert only.
+//! \brief		Serial message are for debug purpose only.
+//! \brief		NOT USED YET : Wifi for tracking/logging position while in my garden
+//! \date		2015-Jan
 //! \author		minbiocabanon
 //--------------------------------------------------
 
@@ -13,22 +17,18 @@
 //! millis() overflow/reset over 50 days
 //--------------------------------------------------
 #include <LTask.h>
-#include "vmthread.h"
-#include "stddef.h"
+#include <vmthread.h>
+#include <stddef.h>
 #include <LGPS.h>
 #include <LGSM.h>
 #include <LBattery.h>
 #include <math.h>
 #include <LEEPROM.h>
-#include "EEPROMAnything.h"
-#include "myprivatedata.h"
 #include <LDateTime.h>
 
-#include <Time.h>
-
-//Params for geofencing
-#define RADIUS_MINI		20.0				// radius in meter where we consider that we are exactly parked in the area
-#define RADIUS_MAXI		100.0				// radius in meter for geofencing centered in BASE_LAT,BASE_LON. When GPS pos is outside this radius -> Alarm !
+#include "EEPROMAnything.h"
+#include "myprivatedata.h"
+#include "robomowtrak.h"
 
 #define	PERIOD_GET_GPS			5000		// interval between 2 GPS positions, in milliseconds
 #define	PERIOD_TEST_GEOFENCING	120000		// interval between 2 geofencing check, in milliseconds
@@ -40,19 +40,18 @@
 
 // SMS menu architecture
 #define TXT_MAIN_MENU	"Main Menu\r\n1 : Status\r\n2 : Alarm ON\r\n3 : Alarm OFF\r\n4 : Params"
-#define TXT_PARAMS_MENU "Params Menu\r\n5 : Change default Num\r\n6 : Change coord.\r\n7 : Change radius\r\n8 : Change secret\r\n9 : Periodic status ON\r\n10 : Periodic status OFF\r\n11 : Low power alarm ON\r\n12 : Low power alarm OFF\r\n13 : Restore factory settings"
+#define TXT_PARAMS_MENU "Params Menu\r\n5 : Change default num.\r\n6 : Change coord.\r\n7 : Change radius\r\n8 : Change secret\r\n9 : Periodic status ON\r\n10 : Periodic status OFF\r\n11 : Low power alarm ON\r\n12 : Low power alarm OFF\r\n13 : Change low power trig.\r\n14 : Restore factory settings"
 
 // Led gpio definition
 #define LEDGPS  13
 #define LEDALARM  12
+// Other gpio
+#define FLOODSENSOR  11						// For future use (input)
 
 // Analog input
 #define VOLT_DIVIDER_INPUT		0.211281	// Voltage divider ratio for mesuring input voltage.
-
-// RTC
-datetimeInfo t;
-unsigned int rtc;
-
+#define MAX_DC_IN				36			// Max input voltage
+#define MIN_DC_IN				9			// Minimum input voltage
 // GPS
 gpsSentenceInfoStruct info;
 
@@ -66,91 +65,6 @@ unsigned long taskCheckSMS;
 unsigned long taskStatusSMS;
 unsigned long TimeOutSMSMenu;
 
-
-
-struct GPSPos {
-	float latitude;
-	char latitude_dir;
-	float longitude;
-	char longitude_dir;
-	int hour;
-	int minute;
-	int second;
-	int	num;
-	int fix;
-	}MyGPSPos;
-
-
-struct Battery {
-	unsigned int bat_level;
-	unsigned int charging_status;
-	}MyBattery;
-	
-struct AnalogInput {
-	unsigned int raw;
-	double analog_voltage;
-	double input_voltage;
-	}MyExternalSupply;	
-
-struct SMS {
-	char message[256];
-	char incomingnumber[13];
-	int menupos;
-	int menulevel;
-	}MySMS;
-	
-struct FlagReg {
-	bool taskGetGPS;	// flag to indicate when process to get GPS possition
-	bool taskGetLiPo;	// flag to indicate that we have to get battery level and charging status
-	bool taskGetAnalog;	// flag to indicate that we have to read analog input of external supply
-	bool taskTestGeof;	// flag to indicate when process geofencing
-	bool taskCheckSMS;	// flag to indicate when check SMS
-	bool taskStatusSMS; // flat to indicate when it's time to send a periodic status SMS
-	bool SMSReceived;	// flag to indicate that an SMS has been received
-	bool fix3D;			// flag to indicate if fix is 3D (at least) or not
-	bool PosOutiseArea;	// flag to indicate if fix is 3D (at least) or not
-	bool taskCheckInputVoltage;	// flag to indicate when do an input voltage check
-	}MyFlag;
-
-enum FixQuality {
-	Invalid,	// 0
-	GPS,		// 1
-	DGPS,		// 2
-	PPS,		// 3
-	RTK,		// 4 Real Time Kinematic
-	FloatRTK,	// 5
-	DR,			// 6 Dead Reckoning
-	Manual,		// 7
-	Simulation	// 8
-	}GPSfix;
-
-enum SMSMENU{
-	SM_NOSTATE,		//0
-	SM_LOGIN,		//1
-	SM_MENU_MAIN,	//2
-	SM_CHG_NUM,		//3
-	SM_CHG_COORD,	//4
-	SM_CHG_RADIUS,	//5
-	SM_CHG_SECRET,	//6
-	SM_RESTORE_DFLT //7
-	};
-
-enum CMDSMS{
-	CMD_NOPE,			//0
-	CMD_STATUS,			//1
-	CMD_ALM_ON,			//2
-	CMD_ALM_OFF,		//3
-	CMD_PARAMS,			//4
-	CMD_CHG_NUM,		//5
-	CMD_CHG_COORD,		//6
-	CMD_CHG_RADIUS,		//7
-	CMD_CHG_SECRET,		//8
-	CMD_PERIODIC_STATUS_ON,	//9
-	CMD_PERIODIC_STATUS_OFF,//10
-	CMD_LOWPOWER_ON,	//11
-	CMD_LOWPOWER_OFF,	//12
-	CMD_RESTORE_DFLT	//13
-	};	
 
 //----------------------------------------------------------------------
 //!\brief	returns distance in meters between two positions, both specified
@@ -391,7 +305,13 @@ void GetLiPoInfo(void){
 		MyBattery.charging_status  = LBattery.isCharging();
 		sprintf(buff," battery level = %d%%", MyBattery.bat_level );
 		Serial.print(buff);
-		sprintf(buff," is charging = %d \n", MyBattery.charging_status );
+		//convert charging direction status
+		char chargdir[24];
+		sprintf(chargdir,"discharging");
+		//convert bit to string
+		if(MyBattery.charging_status)
+			sprintf(chargdir,"charging");		
+		sprintf(buff," is %s\r\n", chargdir );
 		Serial.println(buff);
 	}
 }
@@ -411,12 +331,8 @@ void Geofencing(void){
 		Serial.println(buff);
 		
 		//check where we are
-		if(distance_base <= RADIUS_MINI){
+		if(distance_base <= RADIUS){
 			Serial.println("Position is inside area");
-			MyFlag.PosOutiseArea = false;
-		}
-		else if((distance_base > RADIUS_MINI) && (distance_base <= RADIUS_MAXI) ){
-			Serial.println("We are inside area, keep cool !!");
 			MyFlag.PosOutiseArea = false;
 		}
 		else{
@@ -499,7 +415,7 @@ void ProcessChgNum(){
 			MySMS.menupos = SM_MENU_MAIN;			
 		}
 		else{
-			sprintf(buff, "Error in old phone number : %s.\r\n%s", command, TXT_MAIN_MENU); 
+			sprintf(buff, "Error in old phone number : %s.", command); 
 			Serial.println(buff);
 			//send SMS
 			SendSMS(MySMS.incomingnumber, buff);	
@@ -508,7 +424,7 @@ void ProcessChgNum(){
 		}
 	}
 	else{
-		sprintf(buff, "Error in size parameters (%d): %s.\r\n%s", strlen(MySMS.message),MySMS.message, TXT_MAIN_MENU); 
+		sprintf(buff, "Error in size parameters (%d): %s.", strlen(MySMS.message),MySMS.message); 
 		Serial.println(buff);
 		//send SMS
 		SendSMS(MySMS.incomingnumber, buff);	
@@ -594,6 +510,7 @@ void ProcessChgCoord(){
 			if( (newlatdir == 'N' || newlatdir == 'n' || newlatdir == 'S' || newlatdir == 's') && (newlondir == 'E' || newlondir == 'e' || newlondir == 'W' || newlondir == 'w') && ( newlat >= 0.0 && newlat < 90.0 ) && ( newlon >= 0.0 && newlat < 180.0) ){
 				// say it's ok
 				Serial.println(" Data checked !");
+				// save all data in structure
 				MyParam.base_lat = newlat;
 				MyParam.base_lat_dir = newlatdir;
 				MyParam.base_lon = newlon;
@@ -662,7 +579,7 @@ void ProcessChgSecret(){
 			MySMS.menupos = SM_MENU_MAIN;			
 		}
 		else{
-			sprintf(buff, "Error in old secret code : %s.\r\n%s", command, TXT_MAIN_MENU); 
+			sprintf(buff, "Error in old secret code : %s.", command); 
 			Serial.println(buff);
 			//send SMS
 			SendSMS(MySMS.incomingnumber, buff);	
@@ -671,7 +588,99 @@ void ProcessChgSecret(){
 		}
 	}
 	else{
-		sprintf(buff, "Error in size parameters (%d): %s.\r\n%s", strlen(MySMS.message), MySMS.message, TXT_MAIN_MENU); 
+		sprintf(buff, "Error in size parameters (%d): %s.", strlen(MySMS.message), MySMS.message); 
+		Serial.println(buff);
+		//send SMS
+		SendSMS(MySMS.incomingnumber, buff);	
+		//change state machine to Main_menu
+		MySMS.menupos = SM_MENU_MAIN;
+	}
+}
+
+//----------------------------------------------------------------------
+//!\brief	Proceed to radius of geofencing
+//!\brief	MySMS.message should contain radius in meter
+//!\return  -
+//----------------------------------------------------------------------
+void ProcessChgRadius(){
+	//check lengh before split
+	if( strlen(MySMS.message) <= 5 ){
+		// convert SMS to integer
+		unsigned int radius_sms = atoi(MySMS.message);
+		sprintf(buff, "SMS content as meter : %d\n", radius_sms);
+		Serial.println(buff);
+		
+		//compare old number with the one stored in EEPROM
+		if( radius_sms > 1 and radius_sms <= 10000 ){
+			// value is OK , we can store it in EEPROM
+			MyParam.radius = radius_sms;
+			//Save change in EEPROM
+			EEPROM_writeAnything(0, MyParam);
+			Serial.println("New value saved in EEPROM");
+			sprintf(buff, "New radius saved : %d m", MyParam.radius); 
+			Serial.println(buff);
+			//send SMS
+			SendSMS(MySMS.incomingnumber, buff);	
+			//change state machine to Main_menu
+			MySMS.menupos = SM_MENU_MAIN;			
+		}
+		else{
+			sprintf(buff, "Error, value is outside rangee : %d m", radius_sms); 
+			Serial.println(buff);
+			//send SMS
+			SendSMS(MySMS.incomingnumber, buff);	
+			//change state machine to Main_menu
+			MySMS.menupos = SM_MENU_MAIN;			
+		}
+	}
+	else{
+		sprintf(buff, "Error in size parameters (%d): %s.", strlen(MySMS.message), MySMS.message); 
+		Serial.println(buff);
+		//send SMS
+		SendSMS(MySMS.incomingnumber, buff);	
+		//change state machine to Main_menu
+		MySMS.menupos = SM_MENU_MAIN;
+	}
+}
+
+//----------------------------------------------------------------------
+//!\brief	Proceed to change voltage of low power trigger alarm
+//!\brief	MySMS.message should contain a tension like  11.6
+//!\return  -
+//----------------------------------------------------------------------
+void ProcessLowPowTrig(){
+	//check lengh before getting data
+	if( strlen(MySMS.message) <= 5 ){
+		// convert SMS to float
+		float value_sms = atof(MySMS.message);
+		sprintf(buff, "SMS content as volt : %2.1f\n",value_sms);
+		Serial.println(buff);
+		
+		// check that it is a value inside the range
+		if( value_sms > MIN_DC_IN and value_sms <= MAX_DC_IN ){
+			// value is OK , we can store it in EEPROM
+			MyParam.trig_input_level = value_sms;
+			//Save change in EEPROM
+			EEPROM_writeAnything(0, MyParam);
+			Serial.println("New value saved in EEPROM");
+			sprintf(buff, "New trigger value for low power voltage saved : %2.1f", MyParam.trig_input_level); 
+			Serial.println(buff);
+			//send SMS
+			SendSMS(MySMS.incomingnumber, buff);	
+			//change state machine to Main_menu
+			MySMS.menupos = SM_MENU_MAIN;			
+		}
+		else{
+			sprintf(buff, "Error, value is outside rangee : %2.1f", value_sms); 
+			Serial.println(buff);
+			//send SMS
+			SendSMS(MySMS.incomingnumber, buff);	
+			//change state machine to Main_menu
+			MySMS.menupos = SM_MENU_MAIN;			
+		}
+	}
+	else{
+		sprintf(buff, "Error in size parameters (%d): %s.", strlen(MySMS.message), MySMS.message); 
 		Serial.println(buff);
 		//send SMS
 		SendSMS(MySMS.incomingnumber, buff);	
@@ -750,11 +759,11 @@ void ProcessMenuMain(void){
 				sprintf(chargdir,"charging");				
 			//if GPS is fixed , prepare a complete message
 			if(MyFlag.fix3D == true){
-				sprintf(buff, "Status : \r\nCurrent position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \r\nBat = %d%%, %s\r\nExternal supply : %2.1fV\r\nAlarm is %s.", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.bat_level, chargdir, MyExternalSupply.analog_voltage, flagalarm); 
+				sprintf(buff, "Status : \r\nCurrent position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \r\nLiPo = %d%%, %s\r\nExternal supply : %2.1fV\r\nAlarm is %s.", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.bat_level, chargdir, MyExternalSupply.analog_voltage, flagalarm); 
 			}
 			// else, use short form message
 			else{
-				sprintf(buff, "Status : \r\nNO position fix.\r\nBat = %d%%, %s\r\nExternal supply : %2.1fV\r\nAlarm is %s.", MyBattery.bat_level, chargdir, MyExternalSupply.analog_voltage, flagalarm); 
+				sprintf(buff, "Status : \r\nNO position fix.\r\nLiPo = %d%%, %s\r\nExternal supply : %2.1fV\r\nAlarm is %s.", MyBattery.bat_level, chargdir, MyExternalSupply.analog_voltage, flagalarm); 
 			}
 			Serial.println(buff);
 			SendSMS(MySMS.incomingnumber, buff);
@@ -818,6 +827,13 @@ void ProcessMenuMain(void){
 			
 		case CMD_CHG_RADIUS:
 			// TO DO !!!
+			Serial.println("Change radius for geofencing");
+			//prepare SMS content
+			sprintf(buff, "Send radius in meter (1-10000).\r\nActual radius is %d", MyParam.radius); 
+			Serial.println(buff);
+			//send SMS
+			SendSMS(MySMS.incomingnumber, buff);
+			MySMS.menupos = SM_CHG_RADIUS;				
 			break;
 			
 		case CMD_CHG_SECRET:
@@ -889,6 +905,16 @@ void ProcessMenuMain(void){
 			EEPROM_writeAnything(0, MyParam);
 			Serial.println("Data saved in EEPROM");	
 			break;			
+		
+		case CMD_CHG_LOWPOW_TRIG:
+			Serial.println("Change low power trigger level");
+			//prepare SMS content
+			sprintf(buff, "Send tension in volt, ex. :  11.6\r\nActual trig. is %2.1f", MyParam.trig_input_level); 
+			Serial.println(buff);
+			//send SMS
+			SendSMS(MySMS.incomingnumber, buff);
+			MySMS.menupos = SM_CHG_LOWPOW_TRIG;		
+			break;
 
 		case CMD_RESTORE_DFLT:
 			//prepare SMS content
@@ -959,20 +985,34 @@ void MenuSMS(void){
 				TimeOutSMSMenu = millis();
 				Serial.println("Proceed to change coordinates");
 				ProcessChgCoord();
-				break;		
-
+				break;	
+				
+			case SM_CHG_RADIUS:
+				// reload timer to avoid auto-logout
+				TimeOutSMSMenu = millis();
+				Serial.println("Proceed to change geofencing radius");
+				ProcessChgRadius();
+				break;
+				
 			case SM_CHG_SECRET:
 				// reload timer to avoid auto-logout
 				TimeOutSMSMenu = millis();
 				Serial.println("Proceed to change secret code");
 				ProcessChgSecret();
 				break;
-				
+			
 			case SM_RESTORE_DFLT:
 				// reload timer to avoid auto-logout
 				TimeOutSMSMenu = millis();
 				Serial.println("Proceed to restore default settings");
 				ProcessRestoreDefault();				
+				break;
+			
+			case SM_CHG_LOWPOW_TRIG:
+				// reload timer to avoid auto-logout
+				TimeOutSMSMenu = millis();
+				Serial.println("Proceed to change low power level");
+				ProcessLowPowTrig();
 				break;
 		}
 	
@@ -1017,7 +1057,7 @@ void AlertMng(void){
 		if(MyBattery.charging_status)
 			sprintf(chargdir,"charging");		
 		Serial.println("--- AlertMng : start sending SMS"); 
-		sprintf(buff, "Robomow Alert !! Current position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \r\nBat = %d%%, %s\r\nExternal supply : %2.1fV", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.bat_level, chargdir, MyExternalSupply.analog_voltage); 
+		sprintf(buff, "Robomow Alert !! Current position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \r\nLiPo = %d%%, %s\r\nExternal supply : %2.1fV", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.bat_level, chargdir, MyExternalSupply.analog_voltage); 
 		Serial.println(buff);
 		SendSMS(MyParam.myphonenumber, buff);
 	}
@@ -1039,7 +1079,7 @@ void AlertMng(void){
 		if(MyBattery.charging_status)
 			sprintf(chargdir,"charging");			
 		Serial.println("--- AlertMng : periodic status SMS"); 
-		sprintf(buff, "Periodic status : \r\nCurrent position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \r\nBat = %d%%, %s\r\nExternal supply : %2.1fV\r\nAlarm is %s.", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.bat_level, chargdir, MyExternalSupply.analog_voltage, flagalarm); 
+		sprintf(buff, "Periodic status : \r\nCurrent position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \r\nLiPo = %d%%, %s\r\nExternal supply : %2.1fV\r\nAlarm is %s.", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.bat_level, chargdir, MyExternalSupply.analog_voltage, flagalarm); 
 		Serial.println(buff);
 		SendSMS(MyParam.myphonenumber, buff);
 	}
@@ -1048,14 +1088,18 @@ void AlertMng(void){
 	if (  MyFlag.taskCheckInputVoltage && MyParam.flag_alarm_low_bat ){
 		// reset flag
 		MyParam.flag_alarm_low_bat = false;
+		MyFlag.taskCheckInputVoltage = false;
 		Serial.println("--- AlertMng : Check input voltage"); 
 		// If input voltage is lower than alarm treshold
-		if( MyExternalSupply.analog_voltage <= TRIG_INPUT_LEVEL ){
+		if( MyExternalSupply.analog_voltage <= MyParam.trig_input_level ){
 			// add some debug and send an alarm SMS
-			sprintf(buff, "  LOW BATTERY ALARM\r\n  Input voltage is lower than TRIG_INPUT_LEVEL :\r\n  %2.1fV <= %2.1fV", MyExternalSupply.analog_voltage, TRIG_INPUT_LEVEL ); 
+			sprintf(buff, "  LOW BATTERY ALARM\r\n  Input voltage is lower than TRIG_INPUT_LEVEL :\r\n  %2.1fV <= %2.1fV", MyExternalSupply.analog_voltage, MyParam.trig_input_level ); 
 			Serial.println(buff);
 			SendSMS(MyParam.myphonenumber, buff);
 		}
+	}
+	else{
+		MyFlag.taskCheckInputVoltage = false;
 	}
 }
 
@@ -1067,7 +1111,7 @@ void LoadParamEEPROM() {
 	EEPROM_readAnything(0, MyParam);
 	
 	//uncomment this line to erase EEPROM parameters with DEFAULT parameters
-	//MyParam.flag_data_written = false;
+	MyParam.flag_data_written = false;
 	
 	//check if parameters were already written
 	if( MyParam.flag_data_written == false ){
@@ -1079,12 +1123,13 @@ void LoadParamEEPROM() {
 		snprintf(MyParam.smssecret, destination_size, "%s", SMSSECRET);
 		destination_size = sizeof (MyParam.myphonenumber);
 		snprintf(MyParam.myphonenumber, destination_size, "%s", MYPHONENUMBER);
+		MyParam.radius = RADIUS;
 		MyParam.base_lat = BASE_LAT;
 		MyParam.base_lat_dir = BASE_LAT_DIR;
 		MyParam.base_lon = BASE_LON;
 		MyParam.base_lon_dir = BASE_LON_DIR;
-		MyParam.bat_level_trig = BAT_LEVEL_TRIG;
-	
+		MyParam.lipo_level_trig = LIPO_LEVEL_TRIG;
+		MyParam.trig_input_level = TRIG_INPUT_LEVEL;
 		//set flag that default data are stored
 		MyParam.flag_data_written = true;
 		
@@ -1136,6 +1181,8 @@ void PrintMyParam() {
 	Serial.println(buff);
 	sprintf(buff, "  myphonenumber = %s", MyParam.myphonenumber);
 	Serial.println(buff);
+	sprintf(buff, "  radius = %d", MyParam.radius);
+	Serial.println(buff);	
 	sprintf(buff, "  base_lat = %2.6f", MyParam.base_lat);
 	Serial.println(buff);
 	sprintf(buff, "  base_lat_dir = %c", MyParam.base_lat_dir);
@@ -1144,8 +1191,10 @@ void PrintMyParam() {
 	Serial.println(buff);
 	sprintf(buff, "  base_lon_dir = %c", MyParam.base_lon_dir);
 	Serial.println(buff);
-	sprintf(buff, "  bat_level_trig = %d", MyParam.bat_level_trig);
+	sprintf(buff, "  lipo_level_trig = %d%%", MyParam.lipo_level_trig);
 	Serial.println(buff);
+	sprintf(buff, "  trig_input_level = %2.1fV", MyParam.trig_input_level);
+	Serial.println(buff);	
 }
 
 //----------------------------------------------------------------------
@@ -1183,7 +1232,6 @@ void Scheduler() {
 		MyFlag.taskGetAnalog = true;
 	}	
 	
-	
 	if( ((millis() - TimeOutSMSMenu) > TIMEOUT_SMS_MENU) && MySMS.menupos != SM_LOGIN){
 		MySMS.menupos = SM_LOGIN;
 		Serial.println("--- SMS Menu manager : Timeout ---");
@@ -1200,12 +1248,14 @@ void setup() {
 	Serial.println("RoboMowTrak "); 
 	// GPS power on
 	LGPS.powerOn();
-	Serial.println("LGPS Power on, and waiting ..."); 
+	Serial.println("GPS Powered on."); 
 	
 	// GSM setup
-	while(!LSMS.ready())
+	while(!LSMS.ready()){
 		delay(1000);
-	Serial.println("SIM ready for work!");	
+		Serial.println("Please insert SIM");
+	}
+	Serial.println("SIM ready.");	
 	
 	Serial.println("Deleting SMS received ...");
 	//delete ALL sms received while powered off
