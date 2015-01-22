@@ -34,7 +34,7 @@
 #define	PERIOD_TEST_GEOFENCING	120000		// interval between 2 geofencing check, in milliseconds
 #define PERIOD_LIPO_INFO		120000		// interval between 2 battery level measurement, in milliseconds
 #define PERIOD_STATUS_ANALOG	3600000		// interval between 2 analog input read (external supply), in milliseconds
-#define PERIOD_CHECK_SMS		2000		// interval between 2 SMS check, in milliseconds
+#define PERIOD_CHECK_SMS		1000		// interval between 2 SMS check, in milliseconds
 #define PERIOD_STATUS_SMS		86400000	// interval for periodic status = 24 Hrs , in milliseconds
 #define TIMEOUT_SMS_MENU		300000		// When timeout, SMS menu return to login (user should send password again to log), in milliseconds
 
@@ -663,7 +663,7 @@ void ProcessLowPowTrig(){
 			//Save change in EEPROM
 			EEPROM_writeAnything(0, MyParam);
 			Serial.println("New value saved in EEPROM");
-			sprintf(buff, "New trigger value for low power voltage saved : %2.1f", MyParam.trig_input_level); 
+			sprintf(buff, "New trigger value for low power voltage saved : %2.1fV", MyParam.trig_input_level); 
 			Serial.println(buff);
 			//send SMS
 			SendSMS(MySMS.incomingnumber, buff);	
@@ -671,7 +671,7 @@ void ProcessLowPowTrig(){
 			MySMS.menupos = SM_MENU_MAIN;			
 		}
 		else{
-			sprintf(buff, "Error, value is outside rangee : %2.1f", value_sms); 
+			sprintf(buff, "Error, value is outside rangee : %2.1fV", value_sms); 
 			Serial.println(buff);
 			//send SMS
 			SendSMS(MySMS.incomingnumber, buff);	
@@ -829,7 +829,7 @@ void ProcessMenuMain(void){
 			// TO DO !!!
 			Serial.println("Change radius for geofencing");
 			//prepare SMS content
-			sprintf(buff, "Send radius in meter (1-10000).\r\nActual radius is %d", MyParam.radius); 
+			sprintf(buff, "Send radius in meter (1-10000).\r\nActual radius is %d m", MyParam.radius); 
 			Serial.println(buff);
 			//send SMS
 			SendSMS(MySMS.incomingnumber, buff);
@@ -909,7 +909,7 @@ void ProcessMenuMain(void){
 		case CMD_CHG_LOWPOW_TRIG:
 			Serial.println("Change low power trigger level");
 			//prepare SMS content
-			sprintf(buff, "Send tension in volt, ex. :  11.6\r\nActual trig. is %2.1f", MyParam.trig_input_level); 
+			sprintf(buff, "Send tension in volt, ex. :  11.6\r\nActual trig. is %2.1fV", MyParam.trig_input_level); 
 			Serial.println(buff);
 			//send SMS
 			SendSMS(MySMS.incomingnumber, buff);
@@ -1084,19 +1084,29 @@ void AlertMng(void){
 		SendSMS(MyParam.myphonenumber, buff);
 	}
 
-	// Check input supply level (can be an external battery)
-	if (  MyFlag.taskCheckInputVoltage && MyParam.flag_alarm_low_bat ){
-		// reset flag
+	// Check input supply level (can be an external battery) and LiPo level
+	if (  MyFlag.taskCheckInputVoltage ){
+		// reset flags
 		MyParam.flag_alarm_low_bat = false;
 		MyFlag.taskCheckInputVoltage = false;
 		Serial.println("--- AlertMng : Check input voltage"); 
 		// If input voltage is lower than alarm treshold
-		if( MyExternalSupply.analog_voltage <= MyParam.trig_input_level ){
+		if( (MyExternalSupply.analog_voltage <= MyParam.trig_input_level) && MyParam.flag_alarm_low_bat ){
 			// add some debug and send an alarm SMS
 			sprintf(buff, "  LOW BATTERY ALARM\r\n  Input voltage is lower than TRIG_INPUT_LEVEL :\r\n  %2.1fV <= %2.1fV", MyExternalSupply.analog_voltage, MyParam.trig_input_level ); 
 			Serial.println(buff);
 			SendSMS(MyParam.myphonenumber, buff);
 		}
+		
+		Serial.println("--- AlertMng : Check LiPo voltage"); 
+		// If LiPo voltage is lower than alarm treshold
+		if( MyBattery.bat_level <= MyParam.lipo_level_trig ){
+			// add some debug and send an alarm SMS
+			sprintf(buff, "  LOW VOLTAGE LiPo ALARM\r\n  LiPo voltage is lower than TRIG_INPUT_LEVEL :\r\n  %2.1fV <= %2.1fV", MyBattery.bat_level, MyParam.lipo_level_trig ); 
+			Serial.println(buff);
+			SendSMS(MyParam.myphonenumber, buff);
+		}
+		
 	}
 	else{
 		MyFlag.taskCheckInputVoltage = false;

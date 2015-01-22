@@ -32,8 +32,9 @@
 // SMS Menu
 #define SMSSECRET	"1234"
 
-// battery level trigger for alarm , in %  , WARNING, LIPO level is only 100,66 and 33%
-#define LIPO_LEVEL_TRIG		20		// in % , not used yet !
+// battery level trigger for alarm , in % , WARNING, LIPO level are only 100,66 and 33%
+// Do not use value < 33% because linkitone will not give you another value until 0% ...
+#define LIPO_LEVEL_TRIG		33		// in % , not used yet !
 
 // WiFi
 #define WIFI_AP "****"  			// replace with your setting
