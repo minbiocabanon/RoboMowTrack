@@ -4,6 +4,9 @@
 //! \brief		Use GPS for localisation.
 //! \brief		Full configurable by SMS.
 //! \brief		SMS alert only.
+//! \brief		Read voltage input and can set an alarm on low power.
+//! \brief		Monitor LiPo cell voltage and can set an alarm on low power.
+//! \brief		Flood sensor interface (GPIO) or other sensor.
 //! \brief		Serial message are for debug purpose only.
 //! \brief		NOT USED YET : Wifi for tracking/logging position while in my garden
 //! \date		2015-Jan
@@ -34,9 +37,13 @@
 #define	PERIOD_TEST_GEOFENCING	120000		// interval between 2 geofencing check, in milliseconds
 #define PERIOD_LIPO_INFO		120000		// interval between 2 battery level measurement, in milliseconds
 #define PERIOD_STATUS_ANALOG	3600000		// interval between 2 analog input read (external supply), in milliseconds
+#define PERIOD_CHECK_FLOOD		600000		// interval between 2 flood sensor check
 #define PERIOD_CHECK_SMS		1000		// interval between 2 SMS check, in milliseconds
-#define PERIOD_STATUS_SMS		86400000	// interval for periodic status = 24 Hrs , in milliseconds
 #define TIMEOUT_SMS_MENU		300000		// When timeout, SMS menu return to login (user should send password again to log), in milliseconds
+
+#define PERIODIC_STATUS_SMS		60000		// 1 minute (DO NOT CHANGE) : interval between two Hour+Minute check of periodic time (see after)
+#define PERIODIC_STATUS_SMS_H	12			// Hour for time of periodic status
+#define PERIODIC_STATUS_SMS_M	00			// Minute for time of periodic status
 
 // SMS menu architecture
 #define TXT_MAIN_MENU	"Main Menu\r\n1 : Status\r\n2 : Alarm ON\r\n3 : Alarm OFF\r\n4 : Params"
@@ -49,9 +56,14 @@
 #define FLOODSENSOR  11						// For future use (input)
 
 // Analog input
-#define VOLT_DIVIDER_INPUT		0.211281	// Voltage divider ratio for mesuring input voltage.
+#define VOLT_DIVIDER_INPUT		17.41 //4.727272	// Voltage divider ratio for mesuring input voltage. 
 #define MAX_DC_IN				36			// Max input voltage
 #define MIN_DC_IN				9			// Minimum input voltage
+// Lipo
+// battery level trigger for alarm , in % , WARNING, LIPO level are only 100,66 and 33%
+// Do not use value < 33% because linkitone will not give you another value until 0% ...
+#define LIPO_LEVEL_TRIG	33	// in % , values available 33 - 66 (0 and exlucded logically)
+
 // GPS
 gpsSentenceInfoStruct info;
 
@@ -62,6 +74,7 @@ unsigned long taskTestGeof;
 unsigned long taskGetLiPo;
 unsigned long taskGetAnalog;
 unsigned long taskCheckSMS;
+unsigned long taskCheckFlood;
 unsigned long taskStatusSMS;
 unsigned long TimeOutSMSMenu;
 
@@ -183,7 +196,7 @@ void parseGPGGA(const char* GPGGAstr){
 		MyGPSPos.second    = (GPGGAstr[tmp + 4] - '0') * 10 + (GPGGAstr[tmp + 5] - '0');
 
 		//get time
-		sprintf(buff, "UTC timer %2d-%2d-%2d", MyGPSPos.hour, MyGPSPos.minute, MyGPSPos.second);
+		sprintf(buff, "UTC time %02d:%02d:%2d", MyGPSPos.hour, MyGPSPos.minute, MyGPSPos.second);
 		Serial.print(buff);
 		//get lat/lon coordinates
 		float latitudetmp;
@@ -279,18 +292,36 @@ void GetAnalogRead(void){
 		sprintf(buff," Analog input = %d\r\n", MyExternalSupply.raw );
 		Serial.print(buff);
 		// convert raw data to voltage
-		MyExternalSupply.analog_voltage = MyExternalSupply.raw * 5.0 / 1024;
+		MyExternalSupply.analog_voltage = MyExternalSupply.raw * 5.0 / 1024.0;
 		sprintf(buff," Analog voltage= %2.1fV\r\n", MyExternalSupply.analog_voltage );
 		Serial.print(buff);
 		// compute true input voltage
-		MyExternalSupply.input_voltage = MyExternalSupply.analog_voltage * VOLT_DIVIDER_INPUT ;
-		sprintf(buff," Input voltage= %2.1fV\r\n", MyExternalSupply.analog_voltage );
+		MyExternalSupply.input_voltage = MyExternalSupply.analog_voltage * VOLT_DIVIDER_INPUT + 0.5; // +0.5V for forward voltage of protection diode
+		sprintf(buff," Input voltage= %2.1fV\r\n", MyExternalSupply.input_voltage );
 		Serial.print(buff);
 		// set flag to check if input voltage is high enough
 		MyFlag.taskCheckInputVoltage = true;
 	}
 }
 
+//----------------------------------------------------------------------
+//!\brief	Read Digital input : check if flood sensor detects some water
+//!\return  -
+//----------------------------------------------------------------------
+void GetDigitalInput(void){
+	// if it's time to get digital input from flood sensor
+	if(MyFlag.taskCheckFlood){
+		Serial.println("-- Digital input read --");
+		MyFlag.taskCheckFlood = false;
+		//read digital input
+		MyGpio.FloodSensor = digitalRead(FLOODSENSOR);
+		sprintf(buff," Digital input = %d\r\n", MyGpio.FloodSensor );
+		Serial.print(buff);
+
+		// set flag to check if input voltage is high enough
+		MyFlag.taskCheckInputVoltage = true;
+	}
+}
 
 //----------------------------------------------------------------------
 //!\brief	Grab LiPo battery level and status
@@ -301,9 +332,9 @@ void GetLiPoInfo(void){
 	if(MyFlag.taskGetLiPo){
 		Serial.println("-- Battery Info --");
 		MyFlag.taskGetLiPo = false;
-		MyBattery.bat_level = LBattery.level();
+		MyBattery.LiPo_level = LBattery.level();
 		MyBattery.charging_status  = LBattery.isCharging();
-		sprintf(buff," battery level = %d%%", MyBattery.bat_level );
+		sprintf(buff," battery level = %d%%", MyBattery.LiPo_level );
 		Serial.print(buff);
 		//convert charging direction status
 		char chargdir[24];
@@ -759,11 +790,11 @@ void ProcessMenuMain(void){
 				sprintf(chargdir,"charging");				
 			//if GPS is fixed , prepare a complete message
 			if(MyFlag.fix3D == true){
-				sprintf(buff, "Status : \r\nCurrent position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \r\nLiPo = %d%%, %s\r\nExternal supply : %2.1fV\r\nAlarm is %s.", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.bat_level, chargdir, MyExternalSupply.analog_voltage, flagalarm); 
+				sprintf(buff, "Status : \r\nCurrent position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \r\nLiPo = %d%%, %s\r\nExternal supply : %2.1fV\r\nAlarm is %s.", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.LiPo_level, chargdir, MyExternalSupply.input_voltage, flagalarm); 
 			}
 			// else, use short form message
 			else{
-				sprintf(buff, "Status : \r\nNO position fix.\r\nLiPo = %d%%, %s\r\nExternal supply : %2.1fV\r\nAlarm is %s.", MyBattery.bat_level, chargdir, MyExternalSupply.analog_voltage, flagalarm); 
+				sprintf(buff, "Status : \r\nNO position fix.\r\nLiPo = %d%%, %s\r\nExternal supply : %2.1fV\r\nAlarm is %s.", MyBattery.LiPo_level, chargdir, MyExternalSupply.input_voltage, flagalarm); 
 			}
 			Serial.println(buff);
 			SendSMS(MySMS.incomingnumber, buff);
@@ -1050,69 +1081,71 @@ void AlertMng(void){
 	// if alarm is allowed AND position is outside autorized area
 	if ( MyParam.flag_alarm_onoff && MyFlag.PosOutiseArea){
 		MyFlag.PosOutiseArea = false;
+		Serial.println("--- AlertMng : start sending SMS"); 		
 		//convert charging direction status
 		char chargdir[24];
 		sprintf(chargdir,"discharging");
 		//convert bit to string
 		if(MyBattery.charging_status)
 			sprintf(chargdir,"charging");		
-		Serial.println("--- AlertMng : start sending SMS"); 
-		sprintf(buff, "Robomow Alert !! Current position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \r\nLiPo = %d%%, %s\r\nExternal supply : %2.1fV", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.bat_level, chargdir, MyExternalSupply.analog_voltage); 
+		sprintf(buff, "Robomow Alert !! Current position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \r\nLiPo = %d%%, %s\r\nExternal supply : %2.1fV", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.LiPo_level, chargdir, MyExternalSupply.input_voltage); 
 		Serial.println(buff);
 		SendSMS(MyParam.myphonenumber, buff);
 	}
 	
-	// if periodic status sms is required
+	// each minute : if periodic status sms is required
 	if ( MyParam.flag_periodic_status_onoff && MyFlag.taskStatusSMS){
 		// reset flag
 		MyFlag.taskStatusSMS = false;
-		char flagalarm[4];
-		//convert flag_alarm_onoff
-		sprintf(flagalarm,"OFF");
-		//convert bit to string
-		if(MyParam.flag_alarm_onoff)
-			sprintf(flagalarm,"ON");
-		//convert charging direction status
-		char chargdir[24];
-		sprintf(chargdir,"discharging");
-		//convert bit to string
-		if(MyBattery.charging_status)
-			sprintf(chargdir,"charging");			
-		Serial.println("--- AlertMng : periodic status SMS"); 
-		sprintf(buff, "Periodic status : \r\nCurrent position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \r\nLiPo = %d%%, %s\r\nExternal supply : %2.1fV\r\nAlarm is %s.", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.bat_level, chargdir, MyExternalSupply.analog_voltage, flagalarm); 
-		Serial.println(buff);
-		SendSMS(MyParam.myphonenumber, buff);
+		// check if hour + minute is reach 
+		if ( MyGPSPos.hour == PERIODIC_STATUS_SMS_H && MyGPSPos.minute == PERIODIC_STATUS_SMS_M){
+			// It's time to send a status SMS !!
+			Serial.println("--- AlertMng : periodic status SMS"); 
+			sprintf(buff, "  Ring ! it's %d:%d , time to send a periodic status SMS", MyGPSPos.hour, MyGPSPos.minute ); 
+			Serial.println(buff);			
+			//convert flag_alarm_onoff
+			char flagalarm[4];
+			sprintf(flagalarm,"OFF");
+			//convert bit to string
+			if(MyParam.flag_alarm_onoff)
+				sprintf(flagalarm,"ON");
+			//convert charging direction status
+			char chargdir[24];
+			sprintf(chargdir,"discharging");
+			//convert bit to string
+			if(MyBattery.charging_status)
+				sprintf(chargdir,"charging");			
+			sprintf(buff, "Periodic status : \r\nCurrent position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \r\nLiPo = %d%%, %s\r\nExternal supply : %2.1fV\r\nAlarm is %s.", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.LiPo_level, chargdir, MyExternalSupply.input_voltage, flagalarm); 
+			Serial.println(buff);
+			SendSMS(MyParam.myphonenumber, buff);
+		}
 	}
 
 	// Check input supply level (can be an external battery) and LiPo level
 	if (  MyFlag.taskCheckInputVoltage ){
-		// reset flags
-		MyParam.flag_alarm_low_bat = false;
-		MyFlag.taskCheckInputVoltage = false;
 		Serial.println("--- AlertMng : Check input voltage"); 
 		// If input voltage is lower than alarm treshold
-		if( (MyExternalSupply.analog_voltage <= MyParam.trig_input_level) && MyParam.flag_alarm_low_bat ){
+		if( (MyExternalSupply.input_voltage <= MyParam.trig_input_level) && MyParam.flag_alarm_low_bat ){
 			// add some debug and send an alarm SMS
-			sprintf(buff, "  LOW BATTERY ALARM\r\n  Input voltage is lower than TRIG_INPUT_LEVEL :\r\n  %2.1fV <= %2.1fV", MyExternalSupply.analog_voltage, MyParam.trig_input_level ); 
+			sprintf(buff, "  LOW BATTERY ALARM\r\n  Input voltage is lower than TRIG_INPUT_LEVEL :\r\n  %2.1fV <= %2.1fV", MyExternalSupply.input_voltage, MyParam.trig_input_level ); 
 			Serial.println(buff);
 			SendSMS(MyParam.myphonenumber, buff);
 		}
 		
 		Serial.println("--- AlertMng : Check LiPo voltage"); 
 		// If LiPo voltage is lower than alarm treshold
-		if( MyBattery.bat_level <= MyParam.lipo_level_trig ){
+		if( MyBattery.LiPo_level <= MyParam.lipo_level_trig ){
 			// add some debug and send an alarm SMS
-			sprintf(buff, "  LOW VOLTAGE LiPo ALARM\r\n  LiPo voltage is lower than TRIG_INPUT_LEVEL :\r\n  %2.1fV <= %2.1fV", MyBattery.bat_level, MyParam.lipo_level_trig ); 
+			sprintf(buff, "  LOW VOLTAGE LiPo ALARM\r\n  LiPo voltage is lower than LIPO_LEVEL_TRIG :\r\n  %d%% <= %d%%", MyBattery.LiPo_level, MyParam.lipo_level_trig ); 
 			Serial.println(buff);
 			SendSMS(MyParam.myphonenumber, buff);
 		}
 		
-	}
-	else{
+		// reset flags
+		MyParam.flag_alarm_low_bat = false;
 		MyFlag.taskCheckInputVoltage = false;
 	}
 }
-
 //----------------------------------------------------------------------
 //!\brief	Load params from EEPROM
 //----------------------------------------------------------------------
@@ -1121,14 +1154,16 @@ void LoadParamEEPROM() {
 	EEPROM_readAnything(0, MyParam);
 	
 	//uncomment this line to erase EEPROM parameters with DEFAULT parameters
-	MyParam.flag_data_written = false;
+	// MyParam.flag_data_written = false;
 	
 	//check if parameters were already written
 	if( MyParam.flag_data_written == false ){
 		Serial.println("--- !!! Loading DEFAULT parameters from EEPROM ...  --- ");
 		//EEPROM is empty , so load default parameters (see myprivatedata.h)
 		MyParam.flag_alarm_onoff = FLAG_ALARM_ONOFF;
-		MyParam.flag_periodic_status_onoff = FLAG_PERIODIC_STATUS_ONOFF;		
+		MyParam.flag_periodic_status_onoff = FLAG_PERIODIC_STATUS_ONOFF;	
+		MyParam.flag_alarm_low_bat = FLAG_ALARM_LOW_BAT;
+		MyParam.flag_alarm_flood = FLAG_ALARM_FLOOD;
 		size_t destination_size = sizeof (MyParam.smssecret);
 		snprintf(MyParam.smssecret, destination_size, "%s", SMSSECRET);
 		destination_size = sizeof (MyParam.myphonenumber);
@@ -1186,6 +1221,13 @@ void PrintMyParam() {
 		sprintf(flag,"ON");	
 	sprintf(buff, "  flag_alarm_low_bat = %s", flag);
 	Serial.println(buff);
+
+	sprintf(flag,"OFF");
+	//convert bit to string
+	if(MyParam.flag_alarm_flood)
+		sprintf(flag,"ON");	
+	sprintf(buff, "  flag_alarm_flood = %s", flag);
+	Serial.println(buff);
 	
 	sprintf(buff, "  smssecret = %s", MyParam.smssecret);
 	Serial.println(buff);
@@ -1232,7 +1274,12 @@ void Scheduler() {
 		MyFlag.taskCheckSMS = true;
 	}
 	
-	if( (millis() - taskStatusSMS) > PERIOD_STATUS_SMS){
+	if( (millis() - taskCheckFlood) > PERIOD_CHECK_FLOOD){
+		taskCheckFlood = millis();
+		MyFlag.taskCheckFlood = true;
+	}	
+	
+	if( (millis() - taskStatusSMS) > PERIODIC_STATUS_SMS){
 		taskStatusSMS = millis();
 		MyFlag.taskStatusSMS = true;
 	}
@@ -1254,6 +1301,12 @@ void Scheduler() {
 void setup() {
 	// put your setup code here, to run once:
 	Serial.begin(115200);
+	
+	// set I/O direction
+	pinMode(LEDALARM, OUTPUT);
+	pinMode(LEDGPS, OUTPUT);
+	pinMode(FLOODSENSOR, INPUT);
+	
 	delay(5000);
 	Serial.println("RoboMowTrak "); 
 	// GPS power on
@@ -1314,6 +1367,7 @@ void loop() {
 	GetGPSPos();
 	GetLiPoInfo();
 	GetAnalogRead();
+	GetDigitalInput();
 	CheckSMSrecept();
 	MenuSMS();
 	// SendGPS2Wifi();

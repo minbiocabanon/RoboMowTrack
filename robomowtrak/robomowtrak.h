@@ -12,17 +12,18 @@
 struct EEPROM_param {
 	char smssecret[5];
 	bool flag_data_written;				// when true, this structure contains data. Should be false only at the very first start
-	bool flag_alarm_onoff;				// 1 = alarm on ; 0 = alarm off
-	bool flag_periodic_status_onoff;	// 1 = periodic status on ; 0 = periodic status off	
-	bool flag_alarm_low_bat;			// 1 = check input voltage (can be an external batt.) ; 0 = do not check input voltage
-	char myphonenumber[13];	
+	bool flag_alarm_onoff;				// 1 = alarm geofencing on ; 0 = no geofencing alarm
+	bool flag_periodic_status_onoff;	// 1 = send SMS periodic status ; 0 = no periodic status
+	bool flag_alarm_low_bat;			// 1 = send SMS alarm when low voltage detected at input voltage (can be an external batt.) ; 0 = do not check input voltage
+	bool flag_alarm_flood;				// 1 = send alarm when water detected ; 0 = don't care about water
+	char myphonenumber[13];				// Default phone number where to send messages
 	unsigned int radius;	
 	double base_lat;
 	char base_lat_dir;
 	double base_lon;
 	char base_lon_dir;
-	int lipo_level_trig;				// battery level, when trigged, should send an alarm
-	float trig_input_level;			// trigger alarm for low level input 
+	unsigned int lipo_level_trig;		// battery level, when trigged, should send an alarm
+	float trig_input_level;				// trigger alarm for low level input 
 }MyParam;
 
 //----------------------------------------------------------------------
@@ -42,7 +43,7 @@ struct GPSPos {
 
 
 struct Battery {
-	unsigned int bat_level;
+	unsigned int LiPo_level;
 	unsigned int charging_status;
 	}MyBattery;
 	
@@ -52,6 +53,10 @@ struct AnalogInput {
 	double input_voltage;
 	}MyExternalSupply;	
 
+struct Gpio {
+	unsigned int FloodSensor;
+	}MyGpio;	
+	
 struct SMS {
 	char message[256];
 	char incomingnumber[13];
@@ -65,6 +70,7 @@ struct FlagReg {
 	bool taskGetAnalog;	// flag to indicate that we have to read analog input of external supply
 	bool taskTestGeof;	// flag to indicate when process geofencing
 	bool taskCheckSMS;	// flag to indicate when check SMS
+	bool taskCheckFlood;// flag to indicate when check Flood sensor
 	bool taskStatusSMS; // flat to indicate when it's time to send a periodic status SMS
 	bool SMSReceived;	// flag to indicate that an SMS has been received
 	bool fix3D;			// flag to indicate if fix is 3D (at least) or not
