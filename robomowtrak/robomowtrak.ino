@@ -47,7 +47,7 @@
 #define PERIODIC_STATUS_SMS_M	00			// Minute for time of periodic status
 
 // SMS menu architecture
-#define TXT_MAIN_MENU	"Main Menu\r\n1 : Status\r\n2 : Alarm ON\r\n3 : Alarm OFF\r\n4 : Params"
+#define TXT_MAIN_MENU	"Main Menu\r\n1 : Status\r\n2 : Alarm ON\r\n3 : Alarm OFF\r\n4 : Params\r\n0 : Exit"
 #define TXT_PARAMS_MENU "Params Menu\r\n5 : Change default num.\r\n6 : Change coord.\r\n7 : Change radius\r\n8 : Change secret\r\n9 : Periodic status ON\r\n10 : Periodic status OFF\r\n11 : Low power alarm ON\r\n12 : Low power alarm OFF\r\n13 : Change low power trig.\r\n14 : Restore factory settings"
 
 // Led gpio definition
@@ -1006,7 +1006,9 @@ void MenuSMS(void){
 		Serial.println("--- SMS Menu manager ---");
 		switch(MySMS.menupos){
 			default:
-			case SM_NOSTATE:
+			case SM_EXIT:
+				// Force to return to SM_LOGIN state -> need to receive secret code 
+				MySMS.menupos = SM_LOGIN;
 				break;
 			
 			case SM_LOGIN:
