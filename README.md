@@ -73,11 +73,11 @@ Screenshots
 
 #SMS menu
 
-![Linkitone pic](/docs/SMS_menu.jpg =250x)
+![Linkitone pic](/docs/SMS_menu.jpg)
 
 #SMS alarls
 
-![Linkitone pic](/docs/SMS_alarm.jpg =250x)
+![Linkitone pic](/docs/SMS_alarm.jpg)
 
  
 Instructions
