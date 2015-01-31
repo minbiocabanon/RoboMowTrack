@@ -4,8 +4,9 @@ RoboMowTrack
 GPS tracker on a linkitone platform
 
 More info about linkitone : 
-	http://labs.mediatek.com/
-	http://www.seeedstudio.com/depot/LinkIt-ONE-p-2017.html
+
+- http://labs.mediatek.com/
+- http://www.seeedstudio.com/depot/LinkIt-ONE-p-2017.html
 
 ![Linkitone pic](/docs/Linkitone.jpg)
 
@@ -35,6 +36,7 @@ Principles
 
 The device check if GPS position is inside an round area centered on an custom coordinates.
 When device is outside this area, an SMS alert is sent to your phone.
+SMS will contain an url to googlemap with the actual GPS position.
 Area coordinates, radius and phone number is configurable by SMS.
 
 ##Analog inputs
