@@ -5,10 +5,12 @@ GPS tracker on a linkitone platform
 
 More info about linkitone : http://labs.mediatek.com/
 
+![RoboMowTrack architecture](/docs/Linkitone.jpg)
+
 How it works ?
 ============
 
-![Domini architecture](/docs/diagram.png)
+![RoboMowTrack architecture](/docs/diagram.png)
 
 
  * Use GPS for geolocalisation.
