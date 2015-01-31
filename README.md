@@ -53,8 +53,6 @@ The device can monitor digital input. By default, a flood sensor is connected. D
 
 A lot of parameters can bu set by SMS. You need to send your secret code to the device to receive the menu. Default secret code is *1234*.
 
-![Linkitone pic](/docs/SMS_menu.jpg)
-
 Available settings are :
 
 - Set geofencing alarm ON/OFF
@@ -69,6 +67,17 @@ Available settings are :
 ## Serial port
 
 Serial port is available on micro USB connector. It is only for debugging purpose. No maintenance or configuration messages are available through this serial port.
+
+Screenshots
+============
+
+#SMS menu
+
+![Linkitone pic](/docs/SMS_menu.jpg =250x)
+
+#SMS alarls
+
+![Linkitone pic](/docs/SMS_alarm.jpg =250x)
 
  
 Instructions
