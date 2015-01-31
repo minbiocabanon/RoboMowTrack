@@ -75,9 +75,9 @@ Screenshots
 
 ![Linkitone pic](/docs/SMS_menu.jpg)
 
-#SMS alarls
+#SMS alarms
 
-![Linkitone pic](/docs/SMS_alarm.jpg)
+![Linkitone pic](/docs/SMS_alarms.jpg)
 
  
 Instructions
