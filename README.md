@@ -5,6 +5,24 @@ GPS tracker on a linkitone platform
 
 More info about linkitone : http://labs.mediatek.com/
 
+How it works ?
+============
+
+![Domini architecture](/docs/diagram.png)
+
+
+ * Use GPS for geolocalisation.
+ * Fully configurable by SMS.
+ * SMS alert only.
+ * Read voltage input and can set an alarm on low power.
+ * Monitor LiPo cell voltage and can set an alarm on low power.
+ * Flood sensor interface (GPIO).
+ * Serial messages are for debug purpose only.
+ 
+ Other possibilities
+ * Monitor temperature(s), pressure, temperature, shocks ... (choose your sensor !)
+ * Wifi for tracking/logging position while local wifi available
+
 Instuctions
 ============
 
