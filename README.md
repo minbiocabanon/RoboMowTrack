@@ -29,6 +29,13 @@ How it works ?
  * Monitor temperature(s), pressure, temperature, shocks ... (choose your sensor !)
  * Wifi for tracking/logging position while local wifi available
 
+Applications
+============ 
+
+ * My application : GPS tracker / Geofencing for my robomow (anti theft)
+ * Other application without modifying source code : Geofencing, monitoring for yatch / boat parked at the harbor, ...
+ * Other applications which some modification : GPS tracker for car / truck / caravan , freezer monitoring in second home when power outage, ...
+ 
 
 Principles
 ============
