@@ -24,7 +24,8 @@ How it works ?
  * Flood sensor interface (GPIO).
  * Serial messages are for debug purpose only.
  
- Other possibilities
+ Other possibilities :
+ 
  * Monitor temperature(s), pressure, temperature, shocks ... (choose your sensor !)
  * Wifi for tracking/logging position while local wifi available
 
@@ -89,6 +90,18 @@ Don't forget to set your settings in this file :
 
 	~/robomowtrak/myprivatedata.h
 	
+
+Compile files and uploard to linkitone with arduino IDE (follow instructions in Developer's guide)
+
+http://labs.mediatek.com/site/global/developer_tools/mediatek_linkit/sdk_intro/index.gsp
+
+User 'modem port' to check debug message (SIM detected, GPS Fix, ...)
+	
+	
+
+Troublshooting
+============
+
 If data in EEPROM are corrupted, in the function LoadParamEEPROM() please uncomment 
 
 	MyParam.flag_data_written = false;
