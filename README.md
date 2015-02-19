@@ -103,7 +103,15 @@ Compile files and uploard to linkitone with arduino IDE (follow instructions in 
 http://labs.mediatek.com/site/global/developer_tools/mediatek_linkit/sdk_intro/index.gsp
 
 User 'modem port' to check debug message (SIM detected, GPS Fix, ...)
-	
+
+hardware
+============
+- linkitone
+http://www.seeedstudio.com/depot/LinkIt-ONE-p-2017.html
+
+- plastic case
+http://www.seeedstudio.com/depot/General-Plastic-Case-25x60x100-mm-p-1001.html
+
 	
 
 Troublshooting
