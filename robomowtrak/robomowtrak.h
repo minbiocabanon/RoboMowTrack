@@ -87,11 +87,12 @@ enum FixQuality {
 	FloatRTK,	// 5
 	DR,			// 6 Dead Reckoning
 	Manual,		// 7
-	Simulation	// 8
+	Simulation,	// 8
+	Error		// 9
 	}GPSfix;
 
 enum SMSMENU{
-	SM_NOSTATE,		//0
+	SM_NOPE,		//0
 	SM_LOGIN,		//1
 	SM_MENU_MAIN,	//2
 	SM_CHG_NUM,		//3
@@ -103,7 +104,7 @@ enum SMSMENU{
 	};
 
 enum CMDSMS{
-	CMD_NOPE,			//0
+	CMD_EXIT,			//0
 	CMD_STATUS,			//1
 	CMD_ALM_ON,			//2
 	CMD_ALM_OFF,		//3

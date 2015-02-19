@@ -782,6 +782,11 @@ void ProcessMenuMain(void){
 	int val = atoi(MySMS.message);
 	char flagalarm[4];
 	switch(val){
+		case CMD_EXIT:
+			Serial.println(" Exit !");
+			// Force to return to SM_LOGIN state -> need to receive secret code 
+			MySMS.menupos = SM_LOGIN;
+			break;	
 		case CMD_STATUS:		//status
 			Serial.println("Status required ");
 			
@@ -1005,12 +1010,7 @@ void MenuSMS(void){
 	if( MyFlag.SMSReceived == true ){
 		Serial.println("--- SMS Menu manager ---");
 		switch(MySMS.menupos){
-			default:
-			case SM_EXIT:
-				// Force to return to SM_LOGIN state -> need to receive secret code 
-				MySMS.menupos = SM_LOGIN;
-				break;
-			
+			default:			
 			case SM_LOGIN:
 				//compare secret code with received sms code
 				if( strcmp(MySMS.message, MyParam.smssecret) == 0 ){
@@ -1372,7 +1372,13 @@ void setup() {
 	Serial.println("RoboMowTrak "); 
 	// GPS power on
 	LGPS.powerOn();
-	Serial.println("GPS Powered on."); 
+	Serial.println("GPS Powered on.");
+	// set default value for GPS (needed for default led status)
+	MyGPSPos.fix = Error;
+	
+	// LTask will help you out with locking the mutex so you can access the global data
+    LTask.remoteCall(createThread, NULL);
+	Serial.println("Launch threads.");
 	
 	// GSM setup
 	while(!LSMS.ready()){
@@ -1414,10 +1420,6 @@ void setup() {
 	pinMode(LEDALARM, OUTPUT);
 	
 	Serial.println("Setup done.");	
-	
-    // LTask will help you out with locking the mutex so you can access the global data
-    LTask.remoteCall(createThread, NULL);
-	Serial.println("Launch threads.");
 }
 
 //----------------------------------------------------------------------
@@ -1456,9 +1458,9 @@ VMINT32 thread_ledgps(VM_THREAD_HANDLE thread_handle, void* user_data){
 			case Invalid:
 				// blink led as pulse
 				digitalWrite(LEDGPS, HIGH);
-				delay(150);
+				delay(500);
 				digitalWrite(LEDGPS, LOW);
-				delay(850);
+				delay(500);
 				break;
 			case GPS:
 			case DGPS:
@@ -1468,10 +1470,19 @@ VMINT32 thread_ledgps(VM_THREAD_HANDLE thread_handle, void* user_data){
 			case DR:
 			case Manual:
 			case Simulation:
-				// steady led
+				// blink led as slow pulse
 				digitalWrite(LEDGPS, HIGH);
-				delay(1000);
-				break;					
+				delay(150);
+				digitalWrite(LEDGPS, LOW);
+				delay(2850);
+				break;
+			case Error:
+				// Fast blinking led
+				digitalWrite(LEDGPS, HIGH);
+				delay(100);
+				digitalWrite(LEDGPS, LOW);
+				delay(100);
+				break;
 		}
 		//DEBUG
 		// sprintf(buff, "MyGPSPos.fix = %d", MyGPSPos.fix);
