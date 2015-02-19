@@ -81,6 +81,16 @@ Serial port is available on micro USB connector. It is only for debugging purpos
 Screenshots
 ============
 
+#Hardware setup
+
+![Linkitone pic](docs/pic_robomow_1%20.jpg)
+
+![Linkitone pic](docs/pic_robomow_3%20.jpg)
+
+![Linkitone pic](docs/pic_robomow_4%20.jpg)
+
+![Linkitone pic](docs/pic_robomow_5%20.jpg)
+
 #SMS menu
 
 ![Linkitone pic](/docs/SMS_menu.jpg)
