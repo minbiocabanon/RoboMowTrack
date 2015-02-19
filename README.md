@@ -114,7 +114,7 @@ http://labs.mediatek.com/site/global/developer_tools/mediatek_linkit/sdk_intro/i
 
 User 'modem port' to check debug message (SIM detected, GPS Fix, ...)
 
-hardware
+Hardware
 ============
 - linkitone
 http://www.seeedstudio.com/depot/LinkIt-ONE-p-2017.html
@@ -124,7 +124,7 @@ http://www.seeedstudio.com/depot/General-Plastic-Case-25x60x100-mm-p-1001.html
 
 	
 
-Troublshooting
+Troubleshooting
 ============
 
 If data in EEPROM are corrupted, in the function LoadParamEEPROM() please uncomment 
