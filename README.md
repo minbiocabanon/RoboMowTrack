@@ -114,6 +114,14 @@ http://labs.mediatek.com/site/global/developer_tools/mediatek_linkit/sdk_intro/i
 
 User 'modem port' to check debug message (SIM detected, GPS Fix, ...)
 
+Software
+============
+SDK version must be greater or equal to 1.0.42 ! (previous version has a bug in SMS librarie).
+So do not forget to upgrade your firmware before programming your linkitone !
+Software updater is in your arduino directory :
+
+		~\Arduino\hardware\tools\mtk\FirmwareUpdater.exe
+
 Hardware
 ============
 - linkitone
