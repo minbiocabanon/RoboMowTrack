@@ -83,13 +83,13 @@ Screenshots
 
 #Hardware setup
 
-![Linkitone pic](docs/pic_robomow_1%20.jpg)
+![Linkitone pic](docs/pic_robomow_1.jpg)
 
-![Linkitone pic](docs/pic_robomow_3%20.jpg)
+![Linkitone pic](docs/pic_robomow_3.jpg)
 
-![Linkitone pic](docs/pic_robomow_4%20.jpg)
+![Linkitone pic](docs/pic_robomow_4.jpg)
 
-![Linkitone pic](docs/pic_robomow_5%20.jpg)
+![Linkitone pic](docs/pic_robomow_5.jpg)
 
 #SMS menu
 
