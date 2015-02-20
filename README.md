@@ -15,6 +15,8 @@ How it works ?
 
 ![RoboMowTrack architecture](/docs/diagram.png)
 
+![RoboMowTrack architecture](/docs/Hardware_robomowtrak.png)
+
 
  * Use GPS for geolocalisation.
  * Fully configurable by SMS.
