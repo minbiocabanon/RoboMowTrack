@@ -15,6 +15,9 @@ How it works ?
 
 ![RoboMowTrack architecture](/docs/diagram.png)
 
+
+The tracker is composed with a shield plugged in the linkitone. It allows DC/DC conversion (9-36V to 5V) and GPIO interfaces.
+
 ![RoboMowTrack architecture](/docs/Hardware_robomowtrak.png)
 
 
