@@ -94,7 +94,7 @@ Screenshots
 
 ![Linkitone pic](docs/pic_robomow_4.jpg)
 
-![Linkitone pic](docs/pic_robomow_5.jpg)
+![Linkitone pic](docs/pic_robomow_6.jpg)
 
 #SMS menu
 
