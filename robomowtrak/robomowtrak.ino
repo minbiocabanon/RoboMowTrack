@@ -54,7 +54,7 @@
 #define LEDGPS  				13
 #define LEDALARM  				12
 // Other gpio
-#define FLOODSENSOR  			11			// digital input where flood sensor is connected
+#define FLOODSENSOR  			8			// digital input where flood sensor is connected
 #define FLOODSENSOR_ACTIVE		0			// 0 or 1 ,Set level when flood sensor is active (water detected)
 
 // Analog input
@@ -1377,7 +1377,8 @@ void setup() {
 	MyGPSPos.fix = Error;
 	
 	// LTask will help you out with locking the mutex so you can access the global data
-    LTask.remoteCall(createThread, NULL);
+    LTask.remoteCall(createThread1, NULL);
+	LTask.remoteCall(createThread2, NULL);
 	Serial.println("Launch threads.");
 	
 	// GSM setup
@@ -1441,11 +1442,17 @@ void loop() {
 //----------------------------------------------------------------------
 //!\brief           THREAD DECLARATION
 //----------------------------------------------------------------------
-boolean createThread(void* userdata) {
+boolean createThread1(void* userdata) {
         // The priority can be 1 - 255 and default priority are 0
         // the arduino priority are 245
         vm_thread_create(thread_ledgps, NULL, 255);
-		//vm_thread_create(thread_ledalarm, NULL, 255);
+    return true;
+}
+
+boolean createThread2(void* userdata) {
+        // The priority can be 1 - 255 and default priority are 0
+        // the arduino priority are 245
+		vm_thread_create(thread_ledalarm, NULL, 255);
     return true;
 }
 
@@ -1497,8 +1504,8 @@ VMINT32 thread_ledgps(VM_THREAD_HANDLE thread_handle, void* user_data){
 //---------------------------------------------------------------------- 
 VMINT32 thread_ledalarm(VM_THREAD_HANDLE thread_handle, void* user_data){
     for (;;){
-        // Serial.println("test thread");
-        // delay(2000);
+        Serial.println("test thread2");
+        delay(2000);
     }
     return 0;
 }
