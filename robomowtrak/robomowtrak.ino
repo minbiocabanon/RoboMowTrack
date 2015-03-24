@@ -28,6 +28,7 @@
 #include <math.h>
 #include <LEEPROM.h>
 #include <LDateTime.h>
+#include "RunningMedian.h"
 
 #include "EEPROMAnything.h"
 #include "myprivatedata.h"
@@ -58,7 +59,8 @@
 #define FLOODSENSOR_ACTIVE		0			// 0 or 1 ,Set level when flood sensor is active (water detected)
 
 // Analog input
-#define VOLT_DIVIDER_INPUT		17.41 		// Voltage divider ratio for mesuring input voltage. 
+#define NB_SAMPLE_ANALOG		16
+#define VOLT_DIVIDER_INPUT		18.6 		// Voltage divider ratio for mesuring input voltage. 
 #define MAX_DC_IN				36			// Max input voltage
 #define MIN_DC_IN				9			// Minimum input voltage
 // Lipo
@@ -68,6 +70,9 @@
 
 // GPS
 gpsSentenceInfoStruct info;
+
+// Median computation
+RunningMedian samples = RunningMedian(NB_SAMPLE_ANALOG);
 
 // Miscalleneous 
 char buff[256];
@@ -290,19 +295,28 @@ void GetAnalogRead(void){
 	if(MyFlag.taskGetAnalog){
 		Serial.println("-- Analog input read --");
 		MyFlag.taskGetAnalog = false;
-		//read analog input
-		MyExternalSupply.raw = analogRead(A0);	//gives value between 0 to 1023
-		sprintf(buff," Analog input = %d\r\n", MyExternalSupply.raw );
+		// read 16 times and average
+		unsigned int i = 0;
+		//on fait plusieurs mesures
+		for( i = 0; i < NB_SAMPLE_ANALOG; i++){
+			//read analog input
+			long x  = analogRead(A0);	//gives value between 0 to 1023
+			samples.add(x);
+			delay(10);
+		}
+		//ocompute median value
+		MyExternalSupply.raw = samples.getMedian();
+		sprintf(buff," Analog raw input = %d\r\n", MyExternalSupply.raw );
 		Serial.print(buff);
 		// convert raw data to voltage
 		MyExternalSupply.analog_voltage = MyExternalSupply.raw * 5.0 / 1024.0;
-		sprintf(buff," Analog voltage= %2.1fV\r\n", MyExternalSupply.analog_voltage );
+		sprintf(buff," Analog voltage= %2.2fV\r\n", MyExternalSupply.analog_voltage );
 		Serial.print(buff);
 		// compute true input voltage
-		MyExternalSupply.input_voltage = MyExternalSupply.analog_voltage * VOLT_DIVIDER_INPUT + 0.5; // +0.5V for forward voltage of protection diode
+		MyExternalSupply.input_voltage = MyExternalSupply.analog_voltage * VOLT_DIVIDER_INPUT + 0.425; // +0.5V for forward voltage of protection diode
 		sprintf(buff," Input voltage= %2.1fV\r\n", MyExternalSupply.input_voltage );
 		Serial.println(buff);
-	}
+	}	
 }
 
 //----------------------------------------------------------------------
@@ -1378,7 +1392,7 @@ void setup() {
 	
 	// LTask will help you out with locking the mutex so you can access the global data
     LTask.remoteCall(createThread1, NULL);
-	LTask.remoteCall(createThread2, NULL);
+	//LTask.remoteCall(createThread2, NULL);
 	Serial.println("Launch threads.");
 	
 	// GSM setup
