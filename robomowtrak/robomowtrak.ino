@@ -60,7 +60,7 @@
 
 // Analog input
 #define NB_SAMPLE_ANALOG		16
-#define VOLT_DIVIDER_INPUT		18.6 		// Voltage divider ratio for mesuring input voltage. 
+#define VOLT_DIVIDER_INPUT		18.0 		// Voltage divider ratio for mesuring input voltage. 
 #define MAX_DC_IN				36			// Max input voltage
 #define MIN_DC_IN				9			// Minimum input voltage
 // Lipo
