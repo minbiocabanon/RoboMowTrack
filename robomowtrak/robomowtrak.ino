@@ -16,7 +16,6 @@
 //--------------------------------------------------
 //! some notes here :
 //! google url to send by sms : https://www.google.com/maps?q=<lat>,<lon>
-//!
 //! millis() overflow/reset over 50 days
 //--------------------------------------------------
 #include <LTask.h>
@@ -60,7 +59,7 @@
 
 // Analog input
 #define NB_SAMPLE_ANALOG		16
-#define VOLT_DIVIDER_INPUT		18.0 		// Voltage divider ratio for mesuring input voltage. 
+#define VOLT_DIVIDER_INPUT		5.964 		// Voltage divider ratio for mesuring input voltage. 
 #define MAX_DC_IN				36			// Max input voltage
 #define MIN_DC_IN				9			// Minimum input voltage
 // Lipo
@@ -248,7 +247,7 @@ void convertCoords(float latitude, float longitude, float &lat_return, float &lo
 	int lat_deg_int = int(latitude/100);		//extract the first 2 chars to get the latitudinal degrees
 	int lon_deg_int = int(longitude/100);		//extract first 3 chars to get the longitudinal degrees
     // must now take remainder/60
-    //this is to convert from degrees-mins-secs to decimal degrees
+    // this is to convert from degrees-mins-secs to decimal degrees
     // so the coordinates are "google mappable"
     float latitude_float = latitude - lat_deg_int * 100;		//remove the degrees part of the coordinates - so we are left with only minutes-seconds part of the coordinates
     float longitude_float = longitude - lon_deg_int * 100;     
@@ -295,17 +294,18 @@ void GetAnalogRead(void){
 	if(MyFlag.taskGetAnalog){
 		Serial.println("-- Analog input read --");
 		MyFlag.taskGetAnalog = false;
-		// read 16 times and average
-		unsigned int i = 0;
-		//on fait plusieurs mesures
-		for( i = 0; i < NB_SAMPLE_ANALOG; i++){
-			//read analog input
-			long x  = analogRead(A0);	//gives value between 0 to 1023
-			samples.add(x);
-			delay(10);
-		}
-		//ocompute median value
-		MyExternalSupply.raw = samples.getMedian();
+		// // read 16 times and average
+		// unsigned int i = 0;
+		// //on fait plusieurs mesures
+		// for( i = 0; i < NB_SAMPLE_ANALOG; i++){
+			// //read analog input
+			// long x  = analogRead(A0);	//gives value between 0 to 1023
+			// samples.add(x);
+			// delay(10);
+		// }
+		// //ocompute median value
+		// MyExternalSupply.raw = samples.getMedian();
+		MyExternalSupply.raw = analogRead(A0);	//gives value between 0 to 1023
 		sprintf(buff," Analog raw input = %d\r\n", MyExternalSupply.raw );
 		Serial.print(buff);
 		// convert raw data to voltage
@@ -313,7 +313,7 @@ void GetAnalogRead(void){
 		sprintf(buff," Analog voltage= %2.2fV\r\n", MyExternalSupply.analog_voltage );
 		Serial.print(buff);
 		// compute true input voltage
-		MyExternalSupply.input_voltage = MyExternalSupply.analog_voltage * VOLT_DIVIDER_INPUT + 0.425; // +0.5V for forward voltage of protection diode
+		MyExternalSupply.input_voltage = MyExternalSupply.analog_voltage * VOLT_DIVIDER_INPUT + 0.41; // +0.41V for forward voltage of protection diode
 		sprintf(buff," Input voltage= %2.1fV\r\n", MyExternalSupply.input_voltage );
 		Serial.println(buff);
 	}	
@@ -1362,8 +1362,6 @@ void Scheduler() {
 		MyFlag.taskCheckInputVoltage = true;
 	}
 	
-	
-	
 	if( ((millis() - TimeOutSMSMenu) > TIMEOUT_SMS_MENU) && MySMS.menupos != SM_LOGIN){
 		MySMS.menupos = SM_LOGIN;
 		Serial.println("--- SMS Menu manager : Timeout ---");
@@ -1457,16 +1455,16 @@ void loop() {
 //!\brief           THREAD DECLARATION
 //----------------------------------------------------------------------
 boolean createThread1(void* userdata) {
-        // The priority can be 1 - 255 and default priority are 0
-        // the arduino priority are 245
-        vm_thread_create(thread_ledgps, NULL, 255);
+	// The priority can be 1 - 255 and default priority are 0
+	// the arduino priority are 245
+	vm_thread_create(thread_ledgps, NULL, 255);
     return true;
 }
 
 boolean createThread2(void* userdata) {
-        // The priority can be 1 - 255 and default priority are 0
-        // the arduino priority are 245
-		vm_thread_create(thread_ledalarm, NULL, 255);
+	// The priority can be 1 - 255 and default priority are 0
+	// the arduino priority are 245
+	vm_thread_create(thread_ledalarm, NULL, 255);
     return true;
 }
 
