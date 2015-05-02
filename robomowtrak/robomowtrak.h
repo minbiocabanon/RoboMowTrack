@@ -76,6 +76,7 @@ struct FlagReg {
 	bool fix3D;			// flag to indicate if fix is 3D (at least) or not
 	bool PosOutiseArea;	// flag to indicate if fix is 3D (at least) or not
 	bool taskCheckInputVoltage;	// flag to indicate when do an input voltage check
+	bool taskCheckFW;	// flag to indicate when it's time to check if is FW hour check !	
 	}MyFlag;
 
 enum FixQuality {

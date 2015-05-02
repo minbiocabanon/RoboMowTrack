@@ -8,8 +8,9 @@
 //! \brief		Monitor LiPo cell voltage and can set an alarm on low power.
 //! \brief		Flood sensor interface (GPIO) or other sensor.
 //! \brief		Serial message are for debug purpose only.
+//! \brief		Over The Air by GPRS sketche update
 //! \brief		NOT USED YET : Wifi for tracking/logging position while in my garden
-//! \date		2015-Jan
+//! \date		2015-May
 //! \author		minbiocabanon
 //--------------------------------------------------
 
@@ -27,7 +28,13 @@
 #include <math.h>
 #include <LEEPROM.h>
 #include <LDateTime.h>
+#include <LStorage.h>
+#include <LFlash.h>
+#include <LGPRSClient.h>
+#include <LGPRS.h>
 #include "RunningMedian.h"
+#include "OTAUpdate.h"
+#include "OTAUtils.h"
 
 #include "EEPROMAnything.h"
 #include "myprivatedata.h"
@@ -45,6 +52,10 @@
 #define PERIODIC_STATUS_SMS		60000		// 1 min. (DO NOT CHANGE) : interval between two Hour+Minute check of periodic time (see after)
 #define PERIODIC_STATUS_SMS_H	12			// Hour for time of periodic status
 #define PERIODIC_STATUS_SMS_M	00			// Minute for time of periodic status
+
+#define PERIODIC_CHECK_FW		60000		// 1 min. (DO NOT CHANGE) : interval between two Hour+Minute check of periodic time (see below)
+#define PERIODIC_CHECK_FW_H		21			// Hour for time of periodic check of firmware
+#define PERIODIC_CHECK_FW_M		02			// Minute for time of periodic check of firmware
 
 // SMS menu architecture
 #define TXT_MAIN_MENU	"Main Menu\r\n1 : Status\r\n2 : Alarm ON\r\n3 : Alarm OFF\r\n4 : Params\r\n0 : Exit"
@@ -84,6 +95,7 @@ unsigned long taskCheckSMS;
 unsigned long taskCheckFlood;
 unsigned long taskStatusSMS;
 unsigned long TimeOutSMSMenu;
+unsigned long taskCheckFW;
 
 
 //----------------------------------------------------------------------
@@ -1212,7 +1224,22 @@ void AlertMng(void){
 		// reset flags
 		MyParam.flag_alarm_low_bat = false;
 		MyFlag.taskCheckInputVoltage = false;
-	}
+	}	
+	
+	// Check input supply level (can be an external battery) and LiPo level
+	if (  MyFlag.taskCheckFW ){
+		// reset flag
+		MyFlag.taskCheckFW = false;
+		// check if hour + minute is reach 
+		if ( MyGPSPos.hour == PERIODIC_CHECK_FW_H && MyGPSPos.minute == PERIODIC_CHECK_FW_M){
+			Serial.println("--- AlertMng : FW check on the server");
+			// It's time to check if there is a Firmware update on the remote server
+			// The following code can take some minutes to proceed ...
+			if (OTAUpdate.checkUpdate()) {
+			  OTAUpdate.startUpdate();
+			}
+		}
+	}	
 }
 //----------------------------------------------------------------------
 //!\brief	Load params from EEPROM
@@ -1352,6 +1379,11 @@ void Scheduler() {
 		MyFlag.taskStatusSMS = true;
 	}
 
+	if( (millis() - taskCheckFW) > PERIODIC_CHECK_FW){
+		taskCheckFW = millis();
+		MyFlag.taskCheckFW = true;
+	}	
+
 	if( (millis() - taskGetAnalog) > PERIOD_READ_ANALOG){
 		taskGetAnalog = millis();
 		MyFlag.taskGetAnalog = true;
@@ -1390,7 +1422,7 @@ void setup() {
 	
 	// LTask will help you out with locking the mutex so you can access the global data
     LTask.remoteCall(createThread1, NULL);
-	//LTask.remoteCall(createThread2, NULL);
+	//LTask.remoteCall(createThreadFW, NULL);
 	Serial.println("Launch threads.");
 	
 	// GSM setup
@@ -1405,6 +1437,12 @@ void setup() {
 	while(LSMS.available()){
 		LSMS.flush(); // delete message
 	}
+
+	Serial.printf("init gprs... \r\n");
+	while (!LGPRS.attachGPRS("Free", NULL, NULL)) {
+		delay(500);
+	}
+	OTAUpdate.begin("92.245.144.185", "50150", "OTA_RoboMowTrack");
 	
 	// load params from EEPROM
 	LoadParamEEPROM();
@@ -1421,6 +1459,7 @@ void setup() {
 	taskGetAnalog = millis();
 	taskCheckSMS = millis();
 	taskStatusSMS = millis();
+	taskCheckFW = millis();	
 	
 	
 	// set this flag to proceed a first LiPO level read (if an SMS is received before timer occurs)
@@ -1461,10 +1500,10 @@ boolean createThread1(void* userdata) {
     return true;
 }
 
-boolean createThread2(void* userdata) {
+boolean createThreadFW(void* userdata) {
 	// The priority can be 1 - 255 and default priority are 0
 	// the arduino priority are 245
-	vm_thread_create(thread_ledalarm, NULL, 255);
+	vm_thread_create(thread_fwupdate, NULL, 255);
     return true;
 }
 
@@ -1514,10 +1553,10 @@ VMINT32 thread_ledgps(VM_THREAD_HANDLE thread_handle, void* user_data){
 //----------------------------------------------------------------------
 //!\brief           THREAD LED ALARM
 //---------------------------------------------------------------------- 
-VMINT32 thread_ledalarm(VM_THREAD_HANDLE thread_handle, void* user_data){
+VMINT32 thread_fwupdate(VM_THREAD_HANDLE thread_handle, void* user_data){
     for (;;){
-        Serial.println("test thread2");
-        delay(2000);
+        delay(10000);
+
     }
     return 0;
 }
