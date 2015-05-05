@@ -77,6 +77,7 @@ struct FlagReg {
 	bool PosOutiseArea;	// flag to indicate if fix is 3D (at least) or not
 	bool taskCheckInputVoltage;	// flag to indicate when do an input voltage check
 	bool taskCheckFW;	// flag to indicate when it's time to check if is FW hour check !	
+	bool ForceFWUpdate; // flag to indicate that a manual force update is asked by SMS	
 	}MyFlag;
 
 enum FixQuality {
@@ -101,7 +102,8 @@ enum SMSMENU{
 	SM_CHG_RADIUS,	//5
 	SM_CHG_SECRET,	//6
 	SM_RESTORE_DFLT, //7
-	SM_CHG_LOWPOW_TRIG//8
+	SM_UPDATE_FW, 	//8
+	SM_CHG_LOWPOW_TRIG//9
 	};
 
 enum CMDSMS{
@@ -119,5 +121,6 @@ enum CMDSMS{
 	CMD_LOWPOWER_ON,	//11
 	CMD_LOWPOWER_OFF,	//12
 	CMD_CHG_LOWPOW_TRIG,//13
-	CMD_RESTORE_DFLT	//14
+	CMD_UPDATE_FW,		//14
+	CMD_RESTORE_DFLT	//15
 	};	

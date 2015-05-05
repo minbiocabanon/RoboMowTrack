@@ -1,5 +1,5 @@
 //--------------------------------------------------
-//! \file		mygpscoord.h
+//! \file		myprivatedata.h
 //! \brief		header file for private data as GPS coordinate, phone number and wifi credentials
 //! \date		2015-Jan
 //! \author		minbiocabanon

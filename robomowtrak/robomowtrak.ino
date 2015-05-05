@@ -54,12 +54,12 @@
 #define PERIODIC_STATUS_SMS_M	00			// Minute for time of periodic status
 
 #define PERIODIC_CHECK_FW		60000		// 1 min. (DO NOT CHANGE) : interval between two Hour+Minute check of periodic time (see below)
-#define PERIODIC_CHECK_FW_H		21			// Hour for time of periodic check of firmware
-#define PERIODIC_CHECK_FW_M		02			// Minute for time of periodic check of firmware
+#define PERIODIC_CHECK_FW_H		12			// Hour for time of periodic check of firmware
+#define PERIODIC_CHECK_FW_M		30			// Minute for time of periodic check of firmware
 
 // SMS menu architecture
 #define TXT_MAIN_MENU	"Main Menu\r\n1 : Status\r\n2 : Alarm ON\r\n3 : Alarm OFF\r\n4 : Params\r\n0 : Exit"
-#define TXT_PARAMS_MENU "Params Menu\r\n5 : Change default num.\r\n6 : Change coord.\r\n7 : Change radius\r\n8 : Change secret\r\n9 : Periodic status ON\r\n10 : Periodic status OFF\r\n11 : Low power alarm ON\r\n12 : Low power alarm OFF\r\n13 : Change low power trig.\r\n14 : Restore factory settings"
+#define TXT_PARAMS_MENU "Params Menu\r\n5 : Change default num.\r\n6 : Change coord.\r\n7 : Change radius\r\n8 : Change secret\r\n9 : Periodic status ON\r\n10 : Periodic status OFF\r\n11 : Low power alarm ON\r\n12 : Low power alarm OFF\r\n13 : Change low power trig.\r\n14 : Update firmware\r\n15 : Restore factory settings"
 
 // Led gpio definition
 #define LEDGPS  				13
@@ -85,7 +85,7 @@ gpsSentenceInfoStruct info;
 RunningMedian samples = RunningMedian(NB_SAMPLE_ANALOG);
 
 // Miscalleneous 
-char buff[256];
+char buff[512];
 unsigned long taskGetGPS;
 unsigned long taskTestGeof;
 unsigned long taskGetLiPo;
@@ -1008,6 +1008,17 @@ void ProcessMenuMain(void){
 			MySMS.menupos = SM_CHG_LOWPOW_TRIG;		
 			break;
 
+		case CMD_UPDATE_FW:
+			//prepare SMS content
+			sprintf(buff, "FIRMWARE UPDATE WILL PROCEED IF A NEW VERSION IS AVAILABLE. DEVICE WILL REBOOT SOON. WAIT ABOUT 2 MINUTES"); 
+			Serial.println(buff);
+			//send SMS
+			SendSMS(MySMS.incomingnumber, buff);
+			// set flag to force firmware update
+			MyFlag.ForceFWUpdate = true;
+			MyFlag.taskCheckFW = true;
+			break;
+			
 		case CMD_RESTORE_DFLT:
 			//prepare SMS content
 			sprintf(buff, "CONFIRM RESTORE DEFAULT SETTINGS Y/N ?"); 
@@ -1096,7 +1107,7 @@ void MenuSMS(void){
 				Serial.println("Proceed to restore default settings");
 				ProcessRestoreDefault();				
 				break;
-			
+
 			case SM_CHG_LOWPOW_TRIG:
 				// reload timer to avoid auto-logout
 				TimeOutSMSMenu = millis();
@@ -1230,13 +1241,20 @@ void AlertMng(void){
 	if (  MyFlag.taskCheckFW ){
 		// reset flag
 		MyFlag.taskCheckFW = false;
-		// check if hour + minute is reach 
-		if ( MyGPSPos.hour == PERIODIC_CHECK_FW_H && MyGPSPos.minute == PERIODIC_CHECK_FW_M){
+		// check if hour + minute is reach  OR if a manual force update is incoming
+		if ( (MyGPSPos.hour == PERIODIC_CHECK_FW_H && MyGPSPos.minute == PERIODIC_CHECK_FW_M) || MyFlag.ForceFWUpdate == true){
+			// reset flag
+			MyFlag.ForceFWUpdate = false;
 			Serial.println("--- AlertMng : FW check on the server");
 			// It's time to check if there is a Firmware update on the remote server
 			// The following code can take some minutes to proceed ...
 			if (OTAUpdate.checkUpdate()) {
-			  OTAUpdate.startUpdate();
+				// send a SMS to warn user that is device will be updated
+				sprintf(buff, "  A new firmware version is available. Update is running now ... Your device will restart soon." ); 
+				Serial.println(buff);
+				SendSMS(MyParam.myphonenumber, buff);			
+				// DO update
+				OTAUpdate.startUpdate();
 			}
 		}
 	}	
