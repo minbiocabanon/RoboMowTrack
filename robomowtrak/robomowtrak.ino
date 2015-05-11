@@ -1010,7 +1010,7 @@ void ProcessMenuMain(void){
 
 		case CMD_UPDATE_FW:
 			//prepare SMS content
-			sprintf(buff, "FIRMWARE UPDATE WILL PROCEED IF A NEW VERSION IS AVAILABLE. DEVICE WILL REBOOT SOON. WAIT ABOUT 2 MINUTES"); 
+			sprintf(buff, "FIRMWARE UPDATE WILL PROCEED IF A NEW VERSION IS AVAILABLE."); 
 			Serial.println(buff);
 			//send SMS
 			SendSMS(MySMS.incomingnumber, buff);
@@ -1237,7 +1237,7 @@ void AlertMng(void){
 		MyFlag.taskCheckInputVoltage = false;
 	}	
 	
-	// Check input supply level (can be an external battery) and LiPo level
+	// Check if it's time to check for a firmware update on the server
 	if (  MyFlag.taskCheckFW ){
 		// reset flag
 		MyFlag.taskCheckFW = false;
@@ -1255,6 +1255,12 @@ void AlertMng(void){
 				SendSMS(MyParam.myphonenumber, buff);			
 				// DO update
 				OTAUpdate.startUpdate();
+			}
+			else{
+				// send a SMS to say that there is no update available
+				sprintf(buff, "  No firmware found or host not available." ); 
+				Serial.println(buff);
+				SendSMS(MyParam.myphonenumber, buff);	
 			}
 		}
 	}	
@@ -1569,7 +1575,7 @@ VMINT32 thread_ledgps(VM_THREAD_HANDLE thread_handle, void* user_data){
 }
 
 //----------------------------------------------------------------------
-//!\brief           THREAD LED ALARM
+//!\brief           THREAD FOR FIRMWARE UPDATE
 //---------------------------------------------------------------------- 
 VMINT32 thread_fwupdate(VM_THREAD_HANDLE thread_handle, void* user_data){
     for (;;){
