@@ -96,34 +96,34 @@ boolean OTAUpdateClass::getFirmwareDigest(char* digest, size_t size) {
 	}
 }
 
-boolean OTAUpdateClass::checkUpdate(void) {
+unsigned int OTAUpdateClass::checkUpdate(void) {
 	String vxp_name, vxp_digest;
 	
 	if(!downloadFile(UPDATE_MD5)) {
-		return false;
+		return 1;
 	}
 		
 	if(!parseUpdateMD5(&vxp_name, &vxp_digest)) {
-		return false;
+		return 2;
 	}
 	
 	if(checkMD5(this->firmware_name, vxp_digest.c_str())) {
 		DEBUG_UPDATE("found no new firmware!\r\n");
-		return false;
+		return 3;
 	}
 	
 	DEBUG_UPDATE("found a new firmware %s [%s]!\r\n", vxp_name.c_str(), vxp_digest.c_str());
 	if(!downloadFile(UPDATE_VXP)) {
-		return false;
+		return 4;
 	}
 	
 	if(!checkMD5("C:\\" UPDATE_VXP, vxp_digest.c_str())) {
 		DEBUG_UPDATE("new firmware has a wrong md5sum!\r\n");
-		return false;
+		return 5;
 	}
 	
 	DEBUG_UPDATE("new firmware is ok!\r\n");
-	return true;
+	return 6;
 }
 
 
@@ -251,7 +251,25 @@ boolean OTAUpdateClass::downloadFile(const char* name) {
 					delay(100);
 				}
 			}							
-		}	
+		}
+		else{
+			int n = c.read(buffer, 1024);
+			if(n > 0) {
+				max_millis = millis() + 2000;
+				ota.write(buffer, n);
+				size += n;
+				DEBUG_UPDATE("size = %d\r", size);
+			} else {
+				if(millis() > max_millis) {
+					DEBUG_UPDATE("OTAUpdate::downloadFile - timed out!\r\n");
+					c.stop();
+					ota.close();
+					return false;
+				} else {
+					delay(100);
+				}
+			}
+		}		
 	}
 	c.stop();
 	ota.close();

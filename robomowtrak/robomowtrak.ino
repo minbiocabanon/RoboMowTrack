@@ -40,6 +40,11 @@
 #include "myprivatedata.h"
 #include "robomowtrak.h"
 
+//--------------------------------------------------
+//! \version	
+//--------------------------------------------------
+#define	FWVERSION	3
+
 #define	PERIOD_GET_GPS			5000		// 5 sec. , interval between 2 GPS positions, in milliseconds
 #define	PERIOD_TEST_GEOFENCING	120000		// 2 min. , interval between 2 geofencing check, in milliseconds (can send an SMS alert if we are outside area)
 #define PERIOD_LIPO_INFO		120000		// 2 min. ,interval between 2 battery level measurement, in milliseconds
@@ -851,11 +856,11 @@ void ProcessMenuMain(void){
 				sprintf(chargdir,"charging");				
 			//if GPS is fixed , prepare a complete message
 			if(MyFlag.fix3D == true){
-				sprintf(buff, "Status : \r\nCurrent position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \r\nLiPo = %d%%, %s\r\nExternal supply : %2.1fV\r\nGeofencing alarm is %s.\r\nPeriodic SMS is %s.\r\nLow input voltage alarm is %s.\r\nFlood alarm is %s.", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.LiPo_level, chargdir, MyExternalSupply.input_voltage, flagalarm, flagalarm_period, flagalarm_lowbat, flagalarm_flood); 
+				sprintf(buff, "Status : \r\nCurrent position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \r\nLiPo = %d%%, %s\r\nExternal supply : %2.1fV\r\nGeofencing alarm is %s.\r\nPeriodic SMS is %s.\r\nLow input voltage alarm is %s.\r\nFlood alarm is %s\r\nFw v%d.", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.LiPo_level, chargdir, MyExternalSupply.input_voltage, flagalarm, flagalarm_period, flagalarm_lowbat, flagalarm_flood, FWVERSION); 
 			}
 			// else, use short form message
 			else{
-				sprintf(buff, "Status : \r\nNO position fix.\r\nLiPo = %d%%, %s\r\nExternal supply : %2.1fV\r\nGeofencing alarm is %s.\r\nPeriodic SMS is %s.\r\nLow input voltage alarm is %s.\r\nFlood alarm is %s.", MyBattery.LiPo_level, chargdir, MyExternalSupply.input_voltage, flagalarm, flagalarm_period, flagalarm_lowbat, flagalarm_flood); 
+				sprintf(buff, "Status : \r\nNO position fix.\r\nLiPo = %d%%, %s\r\nExternal supply : %2.1fV\r\nGeofencing alarm is %s.\r\nPeriodic SMS is %s.\r\nLow input voltage alarm is %s.\r\nFlood alarm is %s\r\nFw v%d.", MyBattery.LiPo_level, chargdir, MyExternalSupply.input_voltage, flagalarm, flagalarm_period, flagalarm_lowbat, flagalarm_flood, FWVERSION); 
 			}
 			Serial.println(buff);
 			SendSMS(MySMS.incomingnumber, buff);
@@ -1206,7 +1211,7 @@ void AlertMng(void){
 			//convert bit to string
 			if(MyBattery.charging_status)
 				sprintf(chargdir,"charging");			
-			sprintf(buff, "Periodic status : \r\nCurrent position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \r\nLiPo = %d%%, %s\r\nExternal supply : %2.1fV\r\nGeofencing alarm is %s.\r\nPeriodic SMS is %s.\r\nLow input voltage alarm is %s.\r\nFlood alarm is %s.", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.LiPo_level, chargdir, MyExternalSupply.input_voltage, flagalarm, flagalarm_period, flagalarm_lowbat, flagalarm_flood); 
+			sprintf(buff, "Periodic status : \r\nCurrent position is : https://www.google.com/maps?q=%2.6f%c,%3.6f%c \r\nLiPo = %d%%, %s\r\nExternal supply : %2.1fV\r\nGeofencing alarm is %s.\r\nPeriodic SMS is %s.\r\nLow input voltage alarm is %s.\r\nFlood alarm is %s\r\nFw v%d.", MyGPSPos.latitude, MyGPSPos.latitude_dir, MyGPSPos.longitude, MyGPSPos.longitude_dir, MyBattery.LiPo_level, chargdir, MyExternalSupply.input_voltage, flagalarm, flagalarm_period, flagalarm_lowbat, flagalarm_flood, FWVERSION); 
 			Serial.println(buff);
 			SendSMS(MyParam.myphonenumber, buff);
 		}
@@ -1248,20 +1253,61 @@ void AlertMng(void){
 			Serial.println("--- AlertMng : FW check on the server");
 			// It's time to check if there is a Firmware update on the remote server
 			// The following code can take some minutes to proceed ...
-			if (OTAUpdate.checkUpdate()) {
-				// send a SMS to warn user that is device will be updated
-				sprintf(buff, "  A new firmware version is available. Update is running now ... Your device will restart soon." ); 
-				Serial.println(buff);
-				SendSMS(MyParam.myphonenumber, buff);			
-				// DO update
-				OTAUpdate.startUpdate();
+			switch(OTAUpdate.checkUpdate()){
+				case 1:
+					// send a SMS to say that there is no update available
+					sprintf(buff, "  update.md5 not found or host not available." ); 
+					Serial.println(buff);
+					SendSMS(MyParam.myphonenumber, buff);						
+					break;
+					
+				case 2:
+					// send a SMS to say that there is an error while parsing md5 file
+					sprintf(buff, "  Error while parsing update.md5 file." ); 
+					Serial.println(buff);
+					SendSMS(MyParam.myphonenumber, buff);
+					break;
+				case 3:
+					// send a SMS to say that update.md5 does not contain a valid firmware name
+					sprintf(buff, "  update.md5 does not contain a valid firmware name" ); 
+					Serial.println(buff);
+					SendSMS(MyParam.myphonenumber, buff);
+					break;
+				case 4:
+					// send a SMS to say that there is an error while downloading update.vxp (update.md5 was well downloaded before)
+					sprintf(buff, "  Error while downloading update.vxp (update.md5 was well downloaded before)" ); 
+					Serial.println(buff);
+					SendSMS(MyParam.myphonenumber, buff);
+					break;
+				case 5:
+					// send a SMS to say that New firmware has a wrong md5sum!
+					sprintf(buff, "  New firmware has a wrong md5sum!" ); 
+					Serial.println(buff);
+					SendSMS(MyParam.myphonenumber, buff);
+					break;
+				case 6:
+					// send a SMS to warn user that is device will be updated
+					sprintf(buff, "  A new firmware version is available. Update is running now ... Your device will restart soon." ); 
+					Serial.println(buff);
+					SendSMS(MyParam.myphonenumber, buff);			
+					// DO update
+					OTAUpdate.startUpdate();
+					break;					
 			}
-			else{
-				// send a SMS to say that there is no update available
-				sprintf(buff, "  No firmware found or host not available." ); 
-				Serial.println(buff);
-				SendSMS(MyParam.myphonenumber, buff);	
-			}
+			// if (OTAUpdate.checkUpdate()) {
+				// // send a SMS to warn user that is device will be updated
+				// sprintf(buff, "  A new firmware version is available. Update is running now ... Your device will restart soon." ); 
+				// Serial.println(buff);
+				// SendSMS(MyParam.myphonenumber, buff);			
+				// // DO update
+				// OTAUpdate.startUpdate();
+			// }
+			// else{
+				// // send a SMS to say that there is no update available
+				// sprintf(buff, "  No firmware found or host not available." ); 
+				// Serial.println(buff);
+				// SendSMS(MyParam.myphonenumber, buff);	
+			// }
 		}
 	}	
 }
@@ -1446,7 +1492,7 @@ void setup() {
 	
 	// LTask will help you out with locking the mutex so you can access the global data
     LTask.remoteCall(createThread1, NULL);
-	//LTask.remoteCall(createThreadFW, NULL);
+	LTask.remoteCall(createThreadSerialMenu, NULL);
 	Serial.println("Launch threads.");
 	
 	// GSM setup
@@ -1496,6 +1542,12 @@ void setup() {
 	pinMode(LEDALARM, OUTPUT);
 	
 	Serial.println("Setup done.");	
+	
+	// send an SMS to inform user that the device has boot
+	// DON'T DO THAT BECAUSE GSM NETWORK IS NOT REACHABLE AT STARTUP (NEED SOME MINUTES TO LINK GSM NETWORK!!)
+	// sprintf(buff, "PepetteBox is running.\r\n Firmware version : %d", FWVERSION); 
+	// Serial.println(buff);
+	// SendSMS(MyParam.myphonenumber, buff);	
 }
 
 //----------------------------------------------------------------------
@@ -1524,10 +1576,10 @@ boolean createThread1(void* userdata) {
     return true;
 }
 
-boolean createThreadFW(void* userdata) {
+boolean createThreadSerialMenu(void* userdata) {
 	// The priority can be 1 - 255 and default priority are 0
 	// the arduino priority are 245
-	vm_thread_create(thread_fwupdate, NULL, 255);
+	vm_thread_create(thread_serialmenu, NULL, 255);
     return true;
 }
 
@@ -1575,12 +1627,33 @@ VMINT32 thread_ledgps(VM_THREAD_HANDLE thread_handle, void* user_data){
 }
 
 //----------------------------------------------------------------------
-//!\brief           THREAD FOR FIRMWARE UPDATE
+//!\brief           THREAD THAT MANAGE SERIAL MENU
+//!\brief			Read serial console to menu access
 //---------------------------------------------------------------------- 
-VMINT32 thread_fwupdate(VM_THREAD_HANDLE thread_handle, void* user_data){
-    for (;;){
-        delay(10000);
-
+VMINT32 thread_serialmenu(VM_THREAD_HANDLE thread_handle, void* user_data){
+    
+	char buffth[255];
+	String stSerial;
+	for (;;){
+		// get the string hit on serial port
+		stSerial = Serial.readStringUntil('\n');
+		// if something has been typed
+		if(stSerial != ""){
+			// first delete \n
+			stSerial.replace("\n","");
+			stSerial.replace("\r","");
+			// copy serial to SMS structure			
+			size_t destination_size = sizeof (stSerial);
+			stSerial.toCharArray(MySMS.message, destination_size);
+			//DEBUG
+			sprintf(buffth, ">> SERIAL get : %s", MySMS.message);
+			Serial.println(buffth);
+			// Write 0 in phone number to reply
+			sprintf(MySMS.incomingnumber, "+33000000000");
+			// Do as we have receive an SMS : set flag to analyse this SMS
+			MyFlag.SMSReceived = true;
+		}
+		delay(500);		
     }
     return 0;
 }

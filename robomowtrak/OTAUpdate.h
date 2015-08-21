@@ -39,7 +39,7 @@ public:
 	boolean getFirmwareName(char* name, size_t len);
 	boolean getFirmwareDigest(char* digest, size_t len);
 	
-	boolean checkUpdate(void);
+	unsigned int checkUpdate(void);
 	boolean startUpdate(void);
 	boolean performUpdate(void);
 	
