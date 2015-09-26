@@ -43,7 +43,7 @@
 //--------------------------------------------------
 //! \version	
 //--------------------------------------------------
-#define	FWVERSION	3
+#define	FWVERSION	4
 
 #define	PERIOD_GET_GPS			5000		// 5 sec. , interval between 2 GPS positions, in milliseconds
 #define	PERIOD_TEST_GEOFENCING	120000		// 2 min. , interval between 2 geofencing check, in milliseconds (can send an SMS alert if we are outside area)
@@ -1240,8 +1240,14 @@ void AlertMng(void){
 		// reset flags
 		MyParam.flag_alarm_low_bat = false;
 		MyFlag.taskCheckInputVoltage = false;
-	}	
-	
+	}		
+}
+
+//----------------------------------------------------------------------
+//!\brief	Check if a new firmware update is available (by SMS action)
+//!\return  -
+//----------------------------------------------------------------------
+void CheckFirwareUpdate( void ){
 	// Check if it's time to check for a firmware update on the server
 	if (  MyFlag.taskCheckFW ){
 		// reset flag
@@ -1309,8 +1315,9 @@ void AlertMng(void){
 				// SendSMS(MyParam.myphonenumber, buff);	
 			// }
 		}
-	}	
+	}
 }
+
 //----------------------------------------------------------------------
 //!\brief	Load params from EEPROM
 //----------------------------------------------------------------------
@@ -1512,7 +1519,8 @@ void setup() {
 	while (!LGPRS.attachGPRS("Free", NULL, NULL)) {
 		delay(500);
 	}
-	OTAUpdate.begin("92.245.144.185", "50150", "OTA_RoboMowTrack");
+	//OTAUpdate.begin("92.245.144.185", "50150", "OTA_RoboMowTrack");
+	OTAUpdate.begin("91.224.149.231", "8080", "OTA/OTA_RoboMowTrack");
 	
 	// load params from EEPROM
 	LoadParamEEPROM();
@@ -1564,6 +1572,7 @@ void loop() {
 	// SendGPS2Wifi();
 	Geofencing();
 	AlertMng();
+	CheckFirwareUpdate();	
 }
 
 //----------------------------------------------------------------------
